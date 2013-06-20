@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -81,35 +85,7 @@ void nfc_hal_hci_evt_hdlr (tNFC_HAL_HCI_EVENT_DATA *p_evt_data)
 void nfc_hal_hci_enable (void)
 {
 
-    UINT8 *p_hci_netwk_cmd;
-
-    if (nfc_hal_cb.hci_cb.p_hci_netwk_dh_info_buf)
-    {
-        p_hci_netwk_cmd = (UINT8 *) (nfc_hal_cb.hci_cb.p_hci_netwk_dh_info_buf - NCI_MSG_HDR_SIZE);
-        GKI_freebuf (p_hci_netwk_cmd);
-        nfc_hal_cb.hci_cb.p_hci_netwk_dh_info_buf = NULL;
-    }
-
-    if (nfc_hal_cb.hci_cb.p_hci_netwk_info_buf)
-    {
-        p_hci_netwk_cmd = (UINT8 *) (nfc_hal_cb.hci_cb.p_hci_netwk_info_buf - NCI_MSG_HDR_SIZE);
-        GKI_freebuf (p_hci_netwk_cmd);
-        nfc_hal_cb.hci_cb.p_hci_netwk_info_buf = NULL;
-    }
-
-    if ((p_hci_netwk_cmd = (UINT8 *) GKI_getbuf (NCI_MSG_HDR_SIZE + NFC_HAL_HCI_NETWK_INFO_SIZE)) == NULL)
-    {
-        NCI_TRACE_ERROR0 ("nfc_hal_hci_enable: unable to allocate buffer for reading hci network info from nvram");
-        nfc_hal_hci_init_complete (HAL_NFC_STATUS_FAILED);
-    }
-    else
-    {
-        nfc_hal_cb.hci_cb.p_hci_netwk_info_buf   = (UINT8 *) (p_hci_netwk_cmd + NCI_MSG_HDR_SIZE);
-        nfc_hal_cb.hci_cb.hci_netwk_config_block = 0;
-        memset (nfc_hal_cb.hci_cb.p_hci_netwk_info_buf, 0, NFC_HAL_HCI_NETWK_INFO_SIZE);
-        nfc_hal_nv_co_read ((UINT8 *) nfc_hal_cb.hci_cb.p_hci_netwk_info_buf, NFC_HAL_HCI_NETWK_INFO_SIZE, HC_F3_NV_BLOCK);
-        nfc_hal_main_start_quick_timer (&nfc_hal_cb.hci_cb.hci_timer, NFC_HAL_HCI_VSC_TIMEOUT_EVT, NFC_HAL_HCI_NV_READ_TIMEOUT);
-    }
+      nfc_hal_hci_init_complete (HAL_NFC_STATUS_FAILED);
 }
 
 /*******************************************************************************

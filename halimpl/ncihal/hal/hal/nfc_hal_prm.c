@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -313,7 +317,7 @@ void nfc_hal_prm_spd_check_version (void)
     UINT32 patchfile_patch_present_mask;
     UINT16 patchfile_project_id;
     UINT16 patchfile_ver_major = 0;
-    UINT16 patchfile_ver_minor;
+    UINT16 patchfile_ver_minor = 0;
     UINT16 patchfile_patchsize;
 
     UINT8  return_code = NFC_HAL_PRM_COMPLETE_EVT;
@@ -477,7 +481,7 @@ void nfc_hal_prm_spd_check_version (void)
     {
         static BOOLEAN firstTime = TRUE;
         if (firstTime) {
-            NCI_TRACE_ERROR2 ("BCM2079x: NVM patch version is %d.%d",
+            NCI_TRACE_ERROR2 ("NFCC: NVM patch version is %d.%d",
                     nfc_hal_cb.prm.spd_ver_major, nfc_hal_cb.prm.spd_ver_minor);
             firstTime = FALSE;
         }

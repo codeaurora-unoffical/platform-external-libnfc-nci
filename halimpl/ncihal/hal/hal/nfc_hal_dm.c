@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -24,8 +28,15 @@
 #include "nfc_hal_int.h"
 #include "nfc_hal_post_reset.h"
 #include "userial.h"
-#include "upio.h"
-
+#include <string.h>
+#include <DT_Nfc_link.h>
+#include <DT_Nfc_types.h>
+#include <DT_Nfc_status.h>
+#include <DT_Nfc_i2c.h>
+#include <DT_Nfc_log.h>
+#include <DT_Nfc.h>
+#include <config.h>
+#include <stdlib.h>
 /*****************************************************************************
 ** Constants and types
 *****************************************************************************/
@@ -34,6 +45,9 @@
 #define NFC_HAL_I93_RW_CFG_PARAM_LEN        (3)
 #define NFC_HAL_I93_AFI                     (0)
 #define NFC_HAL_I93_ENABLE_SMART_POLL       (1)
+#define PATCH_NOT_UPDATED                    3
+#define PATCH_UPDATED                        4
+#define BUFFER_MAX                          (1024*100)
 
 static UINT8 nfc_hal_dm_i93_rw_cfg[NFC_HAL_I93_RW_CFG_LEN] =
 {
@@ -61,6 +75,55 @@ const UINT8 nfc_hal_dm_core_reset_cmd[NCI_MSG_HDR_SIZE + NCI_CORE_PARAM_SIZE_RES
     NCI_RESET_TYPE_RESET_CFG
 };
 
+#define NCI_RAW_CMD    0x2F
+#define NCI_RAW_TYPE   0x00
+#define NCI_RAW_LENGTH 0x0D
+
+/* HCI_SendNfcRawRCU */
+const UINT8 nfc_hal_dm_RCU[NCI_MSG_HDR_SIZE + NCI_RAW_LENGTH] =
+{
+    NCI_RAW_CMD,
+    NCI_RAW_TYPE,
+    NCI_RAW_LENGTH,
+    0x82, 0x00, 0xC0, 0x08, 0x00, 0x01, 0x01, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00
+};
+
+/* HCI_SendNfcRawLMAC */
+const UINT8 nfc_hal_dm_LMAC[NCI_MSG_HDR_SIZE + NCI_RAW_LENGTH] =
+{
+    NCI_RAW_CMD,
+    NCI_RAW_TYPE,
+    NCI_RAW_LENGTH,
+    0x82, 0x28, 0x80, 0x08, 0x00, 0x01, 0x01, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00
+};
+
+/* HCI_SendNfcRawWaveGen */
+const UINT8 nfc_hal_dm_WaveGen[NCI_MSG_HDR_SIZE + NCI_RAW_LENGTH] =
+{
+    NCI_RAW_CMD,
+    NCI_RAW_TYPE,
+    NCI_RAW_LENGTH,
+    0x82, 0x18, 0xC0, 0x08, 0x00, 0x01, 0x01, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00
+};
+
+/* HCI_SendNfcRawCollAvoid */
+const UINT8 nfc_hal_dm_CollAvoid[NCI_MSG_HDR_SIZE + NCI_RAW_LENGTH] =
+{
+    NCI_RAW_CMD,
+    NCI_RAW_TYPE,
+    NCI_RAW_LENGTH,
+    0x82, 0x1C, 0xC0, 0x08, 0x00, 0x01, 0x01, 0x10, 0x00, 0xFF, 0x1F, 0x05, 0x00
+};
+
+/* HCI_SendNfcRawCollAvoid2 */
+const UINT8 nfc_hal_dm_CollAvoid2[NCI_MSG_HDR_SIZE + NCI_RAW_LENGTH] =
+{
+    NCI_RAW_CMD,
+    NCI_RAW_TYPE,
+    NCI_RAW_LENGTH,
+    0x82, 0x1C, 0xC0, 0x08, 0x00, 0x01, 0x01, 0x10, 0x00, 0xFF, 0x1F, 0x07, 0x00
+};
+
 #define NCI_PROP_PARAM_SIZE_XTAL_INDEX      3       /* length of parameters in XTAL_INDEX CMD */
 
 const UINT8 nfc_hal_dm_get_build_info_cmd[NCI_MSG_HDR_SIZE] =
@@ -77,13 +140,47 @@ const UINT8 nfc_hal_dm_get_patch_version_cmd [NCI_MSG_HDR_SIZE] =
     NCI_MSG_GET_PATCH_VERSION,
     0x00
 };
+const UINT8 nfc_hal_dm_core_init_cmd[NCI_MSG_HDR_SIZE + NCI_CORE_PARAM_SIZE_INIT] =
+{
+    NCI_MTS_CMD|NCI_GID_CORE,
+    NCI_MSG_CORE_INIT,
+    NCI_CORE_PARAM_SIZE_INIT
+};
+
+const UINT8 nfc_hal_dm_core_con_create_cmd[8] =
+{
+    0x20, 0x04, 0x05, 0xC1, 0x1, 0xA1, 0x01,0x00
+};
+
+const UINT8 nfc_hal_dm_core_con_close_cmd[8] =
+{
+    0x20, 0x05 , 0x01, 0x01
+};
+
+const UINT8 nfc_hal_dm_QC_prop_cmd_patchinfo[4] =
+{
+    0x2f, 0x01, 0x01, 0x01
+};
+
+const UINT8 nfc_hal_dm_QC_prop_cmd_fwversion[4] =
+{
+    0x2f, 0x01, 0x01, 0x00
+};
+UINT16 more_updates=0;
+static UINT8 patch_applied = FALSE,patch_last_data_buff_sent=FALSE,gen_err_ntf_recieved=FALSE,after_patch_core_reset= FALSE;
+UINT8  patch_update = FALSE;
+UINT32 patchdatalen=0;
+UINT8 *patchdata = NULL;
+UINT32 prepatchdatalen = 0;
+UINT8 *prepatchdata = NULL;
+UINT8 *pPatch_buff = NULL;
+UINT8 op_code1 = 1;
 #define NCI_PATCH_INFO_OFFSET_NVMTYPE  35  /* NVM Type offset in patch info RSP */
 
 /*****************************************************************************
 ** Extern function prototypes
 *****************************************************************************/
 extern UINT8 *p_nfc_hal_dm_lptd_cfg;
-extern UINT8 *p_nfc_hal_dm_pll_325_cfg;
 extern UINT8 *p_nfc_hal_dm_start_up_cfg;
 extern UINT8 *p_nfc_hal_dm_start_up_vsc_cfg;
 
@@ -166,38 +263,6 @@ tHAL_NFC_STATUS nfc_hal_dm_set_config (UINT8 tlv_size,
     }
 
     return status;
-}
-
-/*******************************************************************************
-**
-** Function         nfc_hal_dm_get_xtal_index
-**
-** Description      Convert xtal frequency to index
-**
-** Returns          xtal index
-**
-*******************************************************************************/
-static tNFC_HAL_XTAL_INDEX nfc_hal_dm_get_xtal_index (UINT16 xtal_freq)
-{
-    tNFC_HAL_XTAL_INDEX xtal_index;
-
-    switch (xtal_freq)
-    {
-    case  9600: xtal_index = NFC_HAL_XTAL_INDEX_9600;  break;
-    case 13000: xtal_index = NFC_HAL_XTAL_INDEX_13000; break;
-    case 16200: xtal_index = NFC_HAL_XTAL_INDEX_16200; break;
-    case 19200: xtal_index = NFC_HAL_XTAL_INDEX_19200; break;
-    case 24000: xtal_index = NFC_HAL_XTAL_INDEX_24000; break;
-    case 26000: xtal_index = NFC_HAL_XTAL_INDEX_26000; break;
-    case 38400: xtal_index = NFC_HAL_XTAL_INDEX_38400; break;
-    case 52000: xtal_index = NFC_HAL_XTAL_INDEX_52000; break;
-    case 37400: xtal_index = NFC_HAL_XTAL_INDEX_37400; break;
-    default :   xtal_index = NFC_HAL_XTAL_INDEX_MAX;
-                NCI_TRACE_DEBUG1 ("nfc_hal_dm_get_xtal_index ():No matched index for %d", xtal_freq);
-                break;
-    }
-
-    return xtal_index;
 }
 
 /*******************************************************************************
@@ -299,49 +364,9 @@ void nfc_hal_dm_config_nfcc (void)
 
     NCI_TRACE_DEBUG1 ("nfc_hal_dm_config_nfcc (): next_dm_config = %d", nfc_hal_cb.dev_cb.next_dm_config);
 
-    if ((p_nfc_hal_dm_lptd_cfg[0]) && (nfc_hal_cb.dev_cb.next_dm_config <= NFC_HAL_DM_CONFIG_LPTD))
+    if ((p_nfc_hal_dm_start_up_cfg[0]))
     {
-        nfc_hal_cb.dev_cb.next_dm_config = NFC_HAL_DM_CONFIG_PLL_325;
-
-        if (nfc_hal_dm_set_config (p_nfc_hal_dm_lptd_cfg[0],
-                                   &p_nfc_hal_dm_lptd_cfg[1],
-                                   nfc_hal_dm_config_nfcc_cback) == HAL_NFC_STATUS_OK)
-        {
-            return;
-        }
-        else
-        {
-            NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_IDLE);
-            nfc_hal_cb.p_stack_cback (HAL_NFC_POST_INIT_CPLT_EVT, HAL_NFC_STATUS_FAILED);
-            return;
-        }
-    }
-
-    if ((p_nfc_hal_dm_pll_325_cfg) && (nfc_hal_cb.dev_cb.next_dm_config <= NFC_HAL_DM_CONFIG_PLL_325))
-    {
-        xtal_index = nfc_hal_dm_get_xtal_index (nfc_post_reset_cb.dev_init_config.xtal_freq);
-        if (xtal_index < NFC_HAL_XTAL_INDEX_MAX)
-        {
-            nfc_hal_cb.dev_cb.next_dm_config = NFC_HAL_DM_CONFIG_START_UP;
-            p = p_nfc_hal_dm_pll_325_cfg + (xtal_index * NFC_HAL_PLL_325_SETCONFIG_PARAM_LEN);
-            if (nfc_hal_dm_set_config (NFC_HAL_PLL_325_SETCONFIG_PARAM_LEN,
-                                       p,
-                                       nfc_hal_dm_config_nfcc_cback) == HAL_NFC_STATUS_OK)
-            {
-                return;
-            }
-            else
-            {
-                NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_IDLE);
-                nfc_hal_cb.p_stack_cback (HAL_NFC_POST_INIT_CPLT_EVT, HAL_NFC_STATUS_FAILED);
-                return;
-            }
-        }
-    }
-
-    if ((p_nfc_hal_dm_start_up_cfg[0]) && (nfc_hal_cb.dev_cb.next_dm_config <= NFC_HAL_DM_CONFIG_START_UP))
-    {
-        nfc_hal_cb.dev_cb.next_dm_config = NFC_HAL_DM_CONFIG_I93_DATA_RATE;
+        nfc_hal_cb.dev_cb.next_dm_config = NFC_HAL_DM_CONFIG_NONE;
         if (nfc_hal_dm_set_config (p_nfc_hal_dm_start_up_cfg[0],
                                    &p_nfc_hal_dm_start_up_cfg[1],
                                    nfc_hal_dm_config_nfcc_cback) == HAL_NFC_STATUS_OK)
@@ -356,96 +381,6 @@ void nfc_hal_dm_config_nfcc (void)
         }
     }
 
-#if (NFC_HAL_I93_FLAG_DATA_RATE == NFC_HAL_I93_FLAG_DATA_RATE_HIGH)
-    if (nfc_hal_cb.dev_cb.next_dm_config  <= NFC_HAL_DM_CONFIG_I93_DATA_RATE)
-    {
-        nfc_hal_cb.dev_cb.next_dm_config = NFC_HAL_DM_CONFIG_FW_FSM;
-        if (nfc_hal_dm_set_config (NFC_HAL_I93_RW_CFG_LEN,
-                                   nfc_hal_dm_i93_rw_cfg,
-                                   nfc_hal_dm_config_nfcc_cback) == HAL_NFC_STATUS_OK)
-        {
-            return;
-        }
-        else
-        {
-            NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_IDLE);
-            nfc_hal_cb.p_stack_cback (HAL_NFC_POST_INIT_CPLT_EVT, HAL_NFC_STATUS_FAILED);
-            return;
-        }
-    }
-#endif
-
-    /* FW FSM is disabled as default in NFCC */
-    if (nfc_hal_cb.dev_cb.next_dm_config <= NFC_HAL_DM_CONFIG_FW_FSM)
-    {
-        nfc_hal_cb.dev_cb.next_dm_config = NFC_HAL_DM_CONFIG_START_UP_VSC;
-        nfc_hal_dm_set_fw_fsm (NFC_HAL_DM_MULTI_TECH_RESP, nfc_hal_dm_config_nfcc_cback);
-        return;
-    }
-
-    if (nfc_hal_cb.dev_cb.next_dm_config <= NFC_HAL_DM_CONFIG_START_UP_VSC)
-    {
-        if (p_nfc_hal_dm_start_up_vsc_cfg && *p_nfc_hal_dm_start_up_vsc_cfg)
-        {
-            nfc_hal_dm_send_startup_vsc ();
-            return;
-        }
-    }
-
-    /* nothing to config */
-    nfc_hal_cb.dev_cb.next_dm_config = NFC_HAL_DM_CONFIG_NONE;
-    nfc_hal_dm_config_nfcc_cback (0, 0, NULL);
-}
-
-/*******************************************************************************
-**
-** Function         nfc_hal_dm_set_xtal_freq_index
-**
-** Description      Set crystal frequency index
-**
-** Returns          void
-**
-*******************************************************************************/
-void nfc_hal_dm_set_xtal_freq_index (void)
-{
-    UINT8 nci_brcm_xtal_index_cmd[NCI_MSG_HDR_SIZE + NCI_PROP_PARAM_SIZE_XTAL_INDEX];
-    UINT8 *p;
-    tNFC_HAL_XTAL_INDEX xtal_index;
-
-    NCI_TRACE_DEBUG1 ("nfc_hal_dm_set_xtal_freq_index (): xtal_freq = %d", nfc_post_reset_cb.dev_init_config.xtal_freq);
-
-    xtal_index = nfc_hal_dm_get_xtal_index (nfc_post_reset_cb.dev_init_config.xtal_freq);
-
-    switch (xtal_index)
-    {
-    case NFC_HAL_XTAL_INDEX_9600:
-    case NFC_HAL_XTAL_INDEX_13000:
-    case NFC_HAL_XTAL_INDEX_19200:
-    case NFC_HAL_XTAL_INDEX_26000:
-    case NFC_HAL_XTAL_INDEX_38400:
-    case NFC_HAL_XTAL_INDEX_52000:
-
-        {
-            /* no need to set xtal index for these frequency */
-            NCI_TRACE_DEBUG0 ("nfc_hal_dm_set_xtal_freq_index (): no need to set xtal index");
-
-            nfc_post_reset_cb.dev_init_config.flags &= ~NFC_HAL_DEV_INIT_FLAGS_SET_XTAL_FREQ;
-            nfc_hal_dm_send_reset_cmd ();
-            return;
-        }
-        break;
-    }
-
-    p = nci_brcm_xtal_index_cmd;
-    UINT8_TO_STREAM  (p, (NCI_MTS_CMD|NCI_GID_PROP));
-    UINT8_TO_STREAM  (p, NCI_MSG_GET_XTAL_INDEX_FROM_DH);
-    UINT8_TO_STREAM  (p, NCI_PROP_PARAM_SIZE_XTAL_INDEX);
-    UINT8_TO_STREAM  (p, xtal_index);
-    UINT16_TO_STREAM (p, nfc_post_reset_cb.dev_init_config.xtal_freq);
-
-    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_XTAL_SET);
-
-    nfc_hal_dm_send_nci_cmd (nci_brcm_xtal_index_cmd, NCI_MSG_HDR_SIZE + NCI_PROP_PARAM_SIZE_XTAL_INDEX, NULL);
 }
 
 /*******************************************************************************
@@ -467,6 +402,600 @@ void nfc_hal_dm_send_reset_cmd (void)
 
 /*******************************************************************************
 **
+** Function         dump_patch_data_g
+**
+** Description      dump the patch data in Android
+**
+** Returns          void
+**
+*******************************************************************************/
+void dump_patch_data_g(const UINT8 *pPatchDataBuffer,const UINT32 patchfilelen)
+{
+    if(pPatchDataBuffer!=NULL)
+    {
+      const UINT8* buff = pPatchDataBuffer;
+      UINT32  buff_length = patchfilelen;
+      UINT32 k=0, j=0;
+      char    printf_buff[BUFFER_MAX];
+      j = snprintf(printf_buff,BUFFER_MAX,"Memory dump %lu bytes located at %p:  ", buff_length,(void *)buff);
+      if(j > 0){
+        for (k=0;k<buff_length;k++){
+        snprintf(&printf_buff[j+k*3],(size_t)BUFFER_MAX,"%02X ",buff[k]);
+        }
+      }
+      NCI_TRACE_DEBUG1("PATCH UPDATE :memorydump : %s",printf_buff);
+   }
+}
+
+/*******************************************************************************
+**
+** Function         nfc_hal_send_data
+**
+** Description      send HAL data to the NFCC
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_send_data(const UINT8 *p_data, UINT16 len, tNFC_HAL_NCI_CBACK *p_cback)
+{
+    nfc_hal_dm_send_nci_cmd (p_data,len,NULL);
+}
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_verify_nvm_file
+**
+** Description      verifies the nvm file if its format is fine or not.
+**
+** Returns          void
+**
+*******************************************************************************/
+int nfc_hal_dm_verify_nvm_file(void)
+{
+    UINT8 ch = 0,char_cnt=0,k=0,j=0;
+    UINT32 num_of_entries = 0,data_byte=0,i=0;
+    char data_buff[5]={0},more_entries_flag=FALSE,num_of_update[5]={0},cnt=0;
+    fpos_t position = 0;
+
+    NCI_TRACE_DEBUG0("nfc_hal_dm_verify_nvm_file: Start");
+    /* check the number of updates and further file format*/
+    while(ch != '\n')
+    {
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+        num_of_update[cnt++] = ch;
+    }
+    nfc_hal_cb.nvm.no_of_updates = atoi(num_of_update);
+    if(nfc_hal_cb.nvm.no_of_updates == 0)
+    {
+        /* Number of updates found zero*/
+        return FALSE;
+    }
+    NCI_TRACE_DEBUG1("NVM update: number of updates available is %d",nfc_hal_cb.nvm.no_of_updates);
+    for(i=0;i<nfc_hal_cb.nvm.no_of_updates;i++)
+    {
+        if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) != '\n')
+        {
+            NCI_TRACE_DEBUG0("NVM update: file format is ..cmd should be from next line");
+            return FALSE;
+        }
+        data_byte = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+        if((data_byte== 32) || (data_byte== 16) || (data_byte== 8) || (data_byte== 2) || (data_byte== 1) || (data_byte== 0))
+        {
+            /*check if it is followed by space and proper format address*/
+            if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) == 32)
+            {
+                /*check if address is in proper format*/
+                if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) == '0')
+                {
+MORE_ENTRIES:
+                    if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) == 'x')
+                    {
+                        /*address format check*/
+                        for(j=0;j<4;j++)
+                        {
+                             /*pass 8 address chars and check address format is fine*/
+                             ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                             if((ch == 0x20 /*space*/))
+                             {
+                                 /* 0x20 may be valid bytes in addr so do further checks*/
+                                 fgetpos (nfc_hal_cb.nvm.p_Nvm_file, &position);
+                                 /* check if there is any space after this 0x20 byte(space) encountered*/
+                                 if((fgetc(nfc_hal_cb.nvm.p_Nvm_file) != 0x20))
+                                 {
+                                     /*it may be a space. check the next byte to see if it is non zero i.e num_of_entries*/
+                                     if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) != 0x00)
+                                     {
+                                         if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) == 0x20 /*space after num_of_entries*/)
+                                         {
+                                             /* check if after this some valid data values are there */
+                                             if((fgetc(nfc_hal_cb.nvm.p_Nvm_file) == '0') && (fgetc(nfc_hal_cb.nvm.p_Nvm_file) == 'x'))
+                                             {
+                                                 NCI_TRACE_DEBUG1("NVM update: address format is not 32 bit...Currupt update num is %d",i+1);
+                                                 if(more_entries_flag == TRUE)
+                                                 {
+                                                     /*one of extra updates is currupt*/
+                                                     more_entries_flag = FALSE;
+                                                     more_updates = 0;
+                                                 }
+                                                 return FALSE;
+                                             }
+                                         }
+                                     }
+                                 }
+                                 fsetpos (nfc_hal_cb.nvm.p_Nvm_file, &position);
+                             }
+                        }
+                        /*check space before num of entries*/
+                        if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) == 0x20)
+                        {
+                            num_of_entries = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+
+                            /* check data format in case of poke cmd only.Because peek cmd has no data value in it*/
+                            if((data_byte==32) || (data_byte==16) || (data_byte ==8))
+                            {
+                                for(j=0;j<num_of_entries;j++)
+                                {
+                                    /*check space after num_of_entries and then for subsequent data*/
+                                    if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) == 0x20)
+                                    {
+                                        /*check data format is fine.0x...format*/
+                                        if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) == '0')
+                                        {
+                                            if(fgetc(nfc_hal_cb.nvm.p_Nvm_file) == 'x')
+                                            {
+                                                if(data_byte ==32)
+                                                {
+                                                    /*traverse 8 chars of data */
+                                                    for(k=0;k<4;k++)
+                                                    {
+                                                        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                                    }
+                                                }
+                                                else if(data_byte == 16)
+                                                {
+                                                    /*traverse 4 chars of data */
+                                                    for(k=0;k<2;k++)
+                                                    {
+                                                       ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                                    }
+                                                }
+                                                else if(data_byte == 8)
+                                                {
+                                                    /*traverse 2 chars of data */
+                                                    for(k=0;k<1;k++)
+                                                    {
+                                                        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                                    }
+                                                }
+                                            }
+                                            else
+                                            {
+                                                NCI_TRACE_DEBUG1("NVM update: data format wrong...needed format 0x...Currupt update num is %d",i+1);
+                                                if(more_entries_flag == TRUE)
+                                                {
+                                                    /*one of extra updates is currupt*/
+                                                    more_entries_flag = FALSE;
+                                                    more_updates = 0;
+                                                }
+                                                return FALSE;
+                                            }
+                                        }
+                                        else
+                                        {
+                                              NCI_TRACE_DEBUG1("NVM update: data format wrong...needed format 0x...Currupt update num is %d",i+1);
+                                              if(more_entries_flag == TRUE)
+                                              {
+                                                  /*one of extra updates is currupt*/
+                                                  more_entries_flag = FALSE;
+                                                  more_updates = 0;
+                                              }
+                                              return FALSE;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        NCI_TRACE_DEBUG1("NVM update: data format wrong...needed space after number of entries  .Currupt update num is %d",i+1);
+                                        if(more_entries_flag == TRUE)
+                                        {
+                                            /*one of extra updates is currupt*/
+                                            more_entries_flag = FALSE;
+                                            more_updates = 0;
+                                        }
+                                        return FALSE;
+                                    }
+                                }
+                                if(more_entries_flag == TRUE)
+                                {
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            NCI_TRACE_DEBUG1("NVM update: data format wrong...needed space before number of entries .Currupt update num is %d",i+1);
+                            if(more_entries_flag == TRUE)
+                            {
+                                /*one of extra updates is currupt*/
+                                more_entries_flag = FALSE;
+                                more_updates = 0;
+                            }
+                            return FALSE;
+                        }
+                    }
+                    else
+                    {
+                        NCI_TRACE_DEBUG1("NVM update: addr format wrong..wrong nvm cmd format .Currupt update num is %d",i+1);
+                        if(more_entries_flag == TRUE)
+                        {
+                            /*one of extra updates is currupt*/
+                            more_entries_flag = FALSE;
+                            more_updates = 0;
+                        }
+                        return FALSE;
+                    }
+                }
+                else
+                {
+                    NCI_TRACE_DEBUG1("NVM update: addr format wrong..wrong nvm cmd format .Currupt update num is %d",i+1);
+                    if(more_entries_flag == TRUE)
+                    {
+                        /*one of extra updates is currupt*/
+                         more_entries_flag = FALSE;
+                         more_updates = 0;
+                    }
+                    return FALSE;
+                }
+            }
+            else
+            {
+                  NCI_TRACE_DEBUG1("NVM update: Space is missing in cmd..wrong nvm cmd format .Currupt update num is %d",i+1);
+                  if(more_entries_flag == TRUE)
+                  {
+                      /*one of extra updates is currupt*/
+                       more_entries_flag = FALSE;
+                       more_updates = 0;
+                  }
+                  return FALSE;
+            }
+        }
+        else
+        {
+            /*cmd format is wrong*/
+            return FALSE;
+        }
+    }
+
+    /* check if further updates are there .means more than specified in file*/
+    fgetc(nfc_hal_cb.nvm.p_Nvm_file); /*pass new line feed ch*/
+    data_byte = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+    if((data_byte== 32) || (data_byte== 16) || (data_byte== 8) || (data_byte== 2) || (data_byte== 1) || (data_byte== 0))
+    {
+        /*check against the space in the end*/
+        if((fgetc(nfc_hal_cb.nvm.p_Nvm_file) == 32) && (fgetc(nfc_hal_cb.nvm.p_Nvm_file)== '0'))
+        {
+            more_entries_flag = TRUE;
+            more_updates++;
+            NCI_TRACE_DEBUG1("NVM update: more updates are available...Verify again %d",more_updates);
+            goto MORE_ENTRIES;
+        }
+        else
+        {
+            NCI_TRACE_DEBUG0("NVM update: Nvm file verfied ..no more updates are availabe");
+        }
+    }
+    return TRUE;
+}
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_check_nvm_file
+**
+** Description      Checks if the NVM update file is available in specified dir
+**                  if yes then reads the updates one by one besdies deciding the
+**                  number of updates.
+**
+** Returns          int(TRUE if file is present or vice versa)
+**
+*******************************************************************************/
+int nfc_hal_dm_check_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen)
+{
+    UINT32 patchdatalength  = 0,datalen=0,no_of_bytes_to_read=0;
+    UINT8 ch = 0,i=0,no_of_octets=0,addr_buf[4]={0},octet_cnt=0,j=0,tmp_databuff[100]={0},k=0;
+    UINT8 num_of_update[5]={0},cnt=0;
+    fpos_t position=0;
+    char pNvmfilepath[100]={0};
+
+
+    if(GetStrValue("NVM_FILE_PATH", &pNvmfilepath[0], sizeof(pNvmfilepath)))
+    {
+        NCI_TRACE_DEBUG1("NVM_FILE_PATH found: %s",pNvmfilepath);
+    }
+    else
+    {
+        NCI_TRACE_DEBUG0("NVM_FILE_PATH not found");
+    }
+
+    if(!nfc_hal_cb.nvm.p_Nvm_file)
+    {
+        /*nvm update file is opened only once */
+        nfc_hal_cb.nvm.p_Nvm_file = fopen(pNvmfilepath,"rb");
+        if(nfc_hal_cb.nvm.p_Nvm_file)
+        {
+            /*verify if file format and entries are fine*/
+            if(nfc_hal_dm_verify_nvm_file())
+            {
+                fclose(nfc_hal_cb.nvm.p_Nvm_file);
+                nfc_hal_cb.nvm.p_Nvm_file = fopen(pNvmfilepath,"rb");
+                while(ch != '\n')
+                {
+                    ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                    num_of_update[cnt++] = ch;
+                }
+                nfc_hal_cb.nvm.no_of_updates =atoi(num_of_update);
+                if(more_updates)
+                {
+                    nfc_hal_cb.nvm.no_of_updates += more_updates;
+                    more_updates =0;
+                    NCI_TRACE_DEBUG1("NVM update:But Actual total Updates in nvm file are %d",nfc_hal_cb.nvm.no_of_updates);
+                }
+                NCI_TRACE_DEBUG0("NVM update: nvm file verification passed");
+                nfc_hal_cb.nvm.nvm_updated = TRUE;
+            }
+            else
+            {
+                fclose(nfc_hal_cb.nvm.p_Nvm_file);
+                nfc_hal_cb.nvm.no_of_updates =0;
+                NCI_TRACE_DEBUG0("NVM update: nvm file verification failed");
+                return FALSE;
+            }
+        }
+        else
+        {
+            /*NVM Update file is not present*/
+            NCI_TRACE_DEBUG0("NVM Update file is not present");
+            return FALSE;
+        }
+    }
+    if(nfc_hal_cb.nvm.p_Nvm_file)
+    {
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);       // discard LF (new line char)
+        ch = 0;
+
+            /* read first the type of data i.e 32 bit or 16 bit or 8 bit.*/
+            nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+            /*discard first space character*/
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+            /*Now read the address*/
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard 0
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard x
+            while(i !=5)
+            {
+                nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                addr_buf[i-2] = nvmupdatebuff[i-1];
+            }
+            /*Reverse address bytes*/
+            nvmupdatebuff[1] = addr_buf[3];
+            nvmupdatebuff[2] = addr_buf[2];
+            nvmupdatebuff[3] = addr_buf[1];
+            nvmupdatebuff[4] = addr_buf[0];
+            /* discard second space*/
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+            /* read number of items and calculate total octets to be read*/
+            nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+
+            /* check how many entries are to be read*/
+
+            if((nvmupdatebuff[0] == 32) || (nvmupdatebuff[0] == 2))
+            { /*32 bits*/
+                if(nvmupdatebuff[0] == 32)
+                {
+                    nvmupdatebuff[0] = 0x82;
+                    no_of_octets = nvmupdatebuff[i-1]*4;
+                    octet_cnt = 4;
+                }
+                else
+                {
+                    nvmupdatebuff[0] = 0x02;
+                    no_of_octets = 0;
+                }
+            }
+            else if((nvmupdatebuff[0] == 16) || (nvmupdatebuff[0] == 1))
+            { /*16 bits*/
+                if(nvmupdatebuff[0] == 16)
+                {
+                    nvmupdatebuff[0] = 0x81;
+                    no_of_octets = nvmupdatebuff[i-1]*2;
+                    octet_cnt = 2;
+
+                }
+                else
+                {
+                    nvmupdatebuff[0] = 0x01;
+                    no_of_octets = 0;
+                }
+            }
+            else
+            { /* 8 bits*/
+                if(nvmupdatebuff[0] == 8)
+                {
+                    nvmupdatebuff[0] = 0x80;
+                    no_of_octets = nvmupdatebuff[i-1];
+                    octet_cnt = 1;
+                }
+                else
+                {
+                    nvmupdatebuff[0] = 0x00;
+                    no_of_octets = 0;
+                }
+            }
+            if(no_of_octets != 0)
+            {
+                for(j=0;j<no_of_octets+1;j++)
+                {
+                    if(nvmupdatebuff[0] == 0x82)
+                    {
+                        if((octet_cnt ==4) )
+                        {
+                            /* fill data in little endian format in nvmupdatebuff*/
+                            if(k==4)
+                            {
+                                for(;k>0;k--)
+                                  nvmupdatebuff[i++] = tmp_databuff[k-1];
+                            }
+                            k= 0;
+
+                            /*check if all values are filled */
+                            if(j == no_of_octets)
+                                   break;
+
+                            /*discard the unnecessary chararcters*/
+                            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                            if(ch == 32)
+                            {
+                                // spcae is given , needs to be discarded
+                                fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                octet_cnt=0;
+                            }
+                            else
+                            {
+                                // no spcae given , discard only x.0 discarded already.
+                                fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                octet_cnt=0;
+                            }
+                        }
+                    }
+                    if(nvmupdatebuff[0] == 0x81)
+                    {
+                        if((octet_cnt ==2) )
+                        {
+                            /* fill data in little endian format in nvmupdatebuff*/
+                            if(k==2)
+                            {
+                                for(;k>0;k--)
+                                  nvmupdatebuff[i++] = tmp_databuff[k-1];
+                            }
+                            k= 0;
+
+                            /*check if all values are filled */
+                            if(j == no_of_octets)
+                                   break;
+
+                            /*discard the unnecessary chararcters*/
+                            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                            if(ch == 32)
+                            {
+                                // spcae is given , needs to be discarded
+                                fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                octet_cnt=0;
+                            }
+                            else
+                            {
+                                // no spcae given , discard only x.0 discarded already.
+                                fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                octet_cnt=0;
+                            }
+                        }
+                    }
+                    if(nvmupdatebuff[0] == 0x80)
+                    {
+                        if((octet_cnt ==1) )
+                        {
+                             /* fill data in little endian format in nvmupdatebuff*/
+                            if(k==1)
+                            {
+                                nvmupdatebuff[i++] = tmp_databuff[k-1];
+                            }
+                            k = 0;
+
+                            /*check if all values are filled */
+                            if(j == no_of_octets)
+                                   break;
+
+                            /*discard the unnecessary chararcters*/
+                            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                            if(ch == 32)
+                            {
+                                // spcae is given , needs to be discarded
+                                fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                octet_cnt=0;
+                            }
+                            else
+                            {
+                                // no spcae given , discard only x.0 discarded already.
+                                fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                                octet_cnt=0;
+                            }
+                        }
+                   }
+                   tmp_databuff[k++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                   octet_cnt++;
+              }
+         }
+        *nvmupdatebufflen = i-1;
+        return TRUE;
+    }
+    return FALSE;
+}
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_frame_mem_access_cmd
+**
+** Description     Prepares the NCI POKE Cmd with the provided update data
+** Returns         void
+**
+*******************************************************************************/
+void nfc_hal_dm_frame_mem_access_cmd(UINT8 *nvmcmd,UINT8 *nvmupdatebuff,UINT8 *nvmcmdlen)
+{
+    UINT8 num_of_data_bytes = 0,j=0,datalen=0;
+
+    if(nvmupdatebuff[0] == 0x80)
+    {
+        /* all data is 8 bit long only*/
+        num_of_data_bytes = nvmupdatebuff[5];
+    }
+    else if(nvmupdatebuff[0] == 0x81)
+    {
+        /* Half Word*/
+        num_of_data_bytes = nvmupdatebuff[5]*2;
+    }
+    else
+    {
+        /* full Word*/
+        if((nvmupdatebuff[0] != 0x02) && (nvmupdatebuff[0] != 0x01) && (nvmupdatebuff[0] != 0x00))
+        {
+            num_of_data_bytes = nvmupdatebuff[5]*4;
+        }
+   }
+
+   nvmcmd[datalen++] = 0x2F;
+   nvmcmd[datalen++] = 0x00;
+   nvmcmd[datalen++] = NUM_OF_BYTES_ACCESS_FLAG + NUM_OF_BYTES_START_ADDR + \
+                           NUM_OF_BYTES_NUMBER_OF_ITEMS + NUM_OF_BYTES_ADD_DELTA+ \
+                           NUM_OF_BYTES_ACCESS_DELAY+num_of_data_bytes;
+
+    /* access flags*/
+   nvmcmd[datalen++] = nvmupdatebuff[0];
+
+   /* fill addr + number of items*/
+   for(;datalen<(NUM_OF_BYTES_START_ADDR+NUM_OF_BYTES_NUMBER_OF_ITEMS+4);datalen++)
+       nvmcmd[datalen] = nvmupdatebuff[++j];
+
+   nvmcmd[datalen++] = 0x01;  // Address Delta
+   nvmcmd[datalen++] = 0x64;  // delay first byte
+   nvmcmd[datalen++] = 0x00;  // delay second byte
+
+   if((nvmupdatebuff[0] == 0x80) || (nvmupdatebuff[0] == 0x81) || (nvmupdatebuff[0] == 0x82))
+   {
+       /* fill data bytes of POKE Cmd*/
+       for(j=0;j<num_of_data_bytes;j++)
+           nvmcmd[datalen++] = nvmupdatebuff[j+6];
+   }
+
+   *nvmcmdlen = datalen;
+}
+/*******************************************************************************
+**
 ** Function         nfc_hal_dm_proc_msg_during_init
 **
 ** Description      Process NCI message while initializing NFCC
@@ -481,11 +1010,39 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
     UINT8 mt, pbf, gid, op_code;
     UINT8 *p_old, old_gid, old_oid, old_mt;
     tNFC_HAL_NCI_CBACK *p_cback = NULL;
+    UINT8 len = 0,nvmcmdlen = 0;
+    UINT8 nvmupdatebuff[260]={0},nvmdatabufflen=0;
+    UINT8 *nvmcmd = NULL;
+    UINT32 patch_update_flag=0,nvm_update_flag=0;
+
+    char patchfilepath[100]={0},prepatchfilepath[100]={0};
 
     NCI_TRACE_DEBUG1 ("nfc_hal_dm_proc_msg_during_init(): init state:%d", nfc_hal_cb.dev_cb.initializing_state);
+    GetNumValue("PATCH_UPDATE_ENABLE_FLAG", &patch_update_flag, sizeof(patch_update_flag));
+    GetNumValue("NVM_UPDATE_ENABLE_FLAG", &nvm_update_flag, sizeof(nvm_update_flag));
+    if(GetStrValue("FW_PATCH", &patchfilepath[0], sizeof(patchfilepath)))
+    {
+        NCI_TRACE_DEBUG1("FW_PATCH found: %s",patchfilepath);
+    }
+    else
+    {
+        NCI_TRACE_DEBUG0("FW_PATCH not found");
+    }
+    if(GetStrValue("FW_PRE_PATCH", &prepatchfilepath[0], sizeof(prepatchfilepath)))
+    {
+        NCI_TRACE_DEBUG1("FW_PRE_PATCH found: %s",prepatchfilepath);
+    }
+    else
+    {
+        NCI_TRACE_DEBUG0("FW_PRE_PATCH not found");
+    }
+
+
+
+    NCI_TRACE_DEBUG2("PATCH_UPDATE_ENABLE_FLAG= %d :: NVM_UPDATE_ENABLE_FLAG=%d",patch_update_flag,nvm_update_flag);
 
     p = (UINT8 *) (p_msg + 1) + p_msg->offset;
-
+    len = p_msg->len - 2; // removing headers
     NCI_MSG_PRS_HDR0 (p, mt, pbf, gid);
     NCI_MSG_PRS_HDR1 (p, op_code);
 
@@ -522,10 +1079,68 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                 }
                 else
                 {
-                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_BUILD_INFO);
+                    /*patch update mechanism*/
+                    if(nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_RESET)
+                    {
+                        if(patch_update_flag == TRUE)
+                        {
+                            /* First find if PrePatch file is available or not and if yes then read Prepatch data*/
+                            nfc_hal_cb.dev_cb.pre_patch_file_available = nfc_hal_patch_read(prepatchfilepath,&prepatchdata,&prepatchdatalen);
+                            if(nfc_hal_cb.dev_cb.pre_patch_file_available)
+                            {
+                                NCI_TRACE_DEBUG1 ("PATCH Update: Pre patch file length is ==%d \n\n",prepatchdatalen);
+                                dump_patch_data_g(prepatchdata,prepatchdatalen);
+                            }
+                            else
+                            {
+                                NCI_TRACE_DEBUG0("PATCH Update: Pre patch file is not available");
+                            }
 
-                    /* get build information to find out HW */
-                    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_get_build_info_cmd, NCI_MSG_HDR_SIZE, NULL);
+                            nfc_hal_cb.dev_cb.patch_file_available = nfc_hal_patch_read(patchfilepath,&patchdata,&patchdatalen);
+                            if(nfc_hal_cb.dev_cb.patch_file_available)
+                            {
+                                NCI_TRACE_DEBUG1 ("PATCH Update: Patch file length is ==%d \n\n",patchdatalen);
+                                dump_patch_data_g(patchdata,patchdatalen);
+                            }
+                            else
+                            {
+                                NCI_TRACE_DEBUG0("PATCH Update: Patch file is not available");
+                            }
+
+                            /*Check if Prepatch file is relevent for patch file if prepatch exist */
+                            if((nfc_hal_cb.dev_cb.pre_patch_file_available) && (nfc_hal_cb.dev_cb.patch_file_available))
+                            {
+                                patch_update = FALSE; /* Reset flag for further test*/
+                                NCI_TRACE_DEBUG0("PATCH Update : Validating Prepatch and patch files");
+                                patch_update = nfc_hal_patch_validate(patchdata,patchdatalen,prepatchdata,prepatchdatalen);
+                            }
+                            else
+                            {
+                                patch_update = TRUE;
+                            }
+                            if(patch_update)
+                            {
+                                /* Files validated ,start patch update process*/
+                                nfc_hal_cb.dev_cb.patch_applied = FALSE;
+                                nfc_hal_cb.dev_cb.pre_patch_applied = FALSE;
+                                NCI_TRACE_DEBUG0("PATCH Update : Validation Done, Patch Update starts..Creating Dynamic connection..");
+                                NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_FOR_PATCH_DNLD);
+                                nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_init_cmd, NCI_MSG_HDR_SIZE, NULL);
+                            }
+                            else
+                            {
+                                NCI_TRACE_DEBUG0("PATCH Update : Validation Failed, Patch Update Cancled..Doing normal Initialization");
+                                NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
+                                HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
+                            }
+                        }
+                        else
+                        {
+                            NCI_TRACE_DEBUG0("Patch flag is disbaled...Preinit Done");
+                            NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
+                            HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
+                        }
+                    }
                 }
             }
             else
@@ -534,35 +1149,422 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                 p++;                                /* Skip over param len */
                 STREAM_TO_UINT8 (reset_reason, p);
                 STREAM_TO_UINT8 (reset_type, p);
-                nfc_hal_prm_spd_reset_ntf (reset_reason, reset_type);
+                NCI_TRACE_DEBUG2("RESET NTF Recieved before Pre Init: reset_reason = %d  reset_type = %d",reset_reason,reset_type);
+
+                /*  Note -- NFCC will reset itself  once  the  patch  data  is sent  to  it completly. So it  will  send the
+                            CORE_RESET_NTF  to  DH  after  patch  is  sent and  applied .So  the rsp to  CORE_CON_CLOSE  cmd
+                            will not come back on actual  target board  .
+                            GEN_PROP_CMD can be sent to enquire the ECDSA signature just after RESET_NTF without sending
+                            CORE_INIT again.
+               */
+               NCI_TRACE_DEBUG1(" nfc_hal_cb.dev_cb.initializing_state : %d",nfc_hal_cb.dev_cb.initializing_state);
+
+               if((nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_PATCH_INFO))
+               {
+                   /*Send Gen_Prop_Cmd only when init state is NFC_HAL_INIT_FOR_PATCH_DNLD.
+                     means patch download is going on*/
+                   NCI_TRACE_DEBUG0(" sending prop cmd for patch signature after patch applied");
+                   nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                   nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
+               }
             }
         }
-        else if (p_cback)
+
+        if(patch_update_flag == TRUE)
         {
-            (*p_cback) ((tNFC_HAL_NCI_EVT) (op_code),
-                        p_msg->len,
-                        (UINT8 *) (p_msg + 1) + p_msg->offset);
+            if(op_code == NCI_MSG_CORE_INIT)
+            {
+                if (mt == NCI_MT_RSP)
+                {
+
+                    if(nvm_update_flag == TRUE)
+                    {
+                /*Check if NVM update file is available*/
+                if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates >0))
+                {
+                    /*nvm update file is present . Send update before patch data*/
+                    /* frame cmd now*/
+                    nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
+                    if(nvmcmd)
+                    {
+                        nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
+                    }
+                    else
+                    {
+                        /*mem allocation failed */
+                        return;
+                    }
+                    /* send nvm update cmd(NCI POKE) to NFCC*/
+                    nfc_hal_cb.nvm.no_of_updates--;
+                    nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
+                    free(nvmcmd);
+                    if(nfc_hal_cb.nvm.no_of_updates == 0)
+                    {
+                        /* All updates sent so close file now*/
+                        fclose(nfc_hal_cb.nvm.p_Nvm_file);
+                        nfc_hal_cb.nvm.p_Nvm_file = NULL;
+                        nfc_hal_cb.nvm.nvm_updated = TRUE;
+                    }
+                }
+                else
+                {
+                            /* Patch download seq going on.dynamic connection creation with NFCC for patch download*/
+                            NCI_TRACE_DEBUG0("PATCH Update : Sending Prop Cmd to check FW version");
+                            NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+                            nfc_hal_cb.nvm.nvm_updated = FALSE;
+                            nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_fwversion, 4, NULL);
+                       }
+                    }
+                    else
+                    {
+                    /* Patch download seq going on.dynamic connection creation with NFCC for patch download*/
+                    NCI_TRACE_DEBUG0("PATCH Update : Sending Prop Cmd to check FW version");
+                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+                    nfc_hal_cb.nvm.nvm_updated = FALSE;
+                    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_fwversion, 4, NULL);
+                }
+            }
+        }
+        else if(op_code == NCI_MSG_CORE_CONN_CREATE)
+        {
+           /* connection created so start sending patch data */
+           if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+           {
+               NCI_TRACE_DEBUG0("PATCH Update : Sending Prepatch data");
+               pPatch_buff = (UINT8*)malloc((p[len-3]+NCI_MSG_HDR_SIZE));
+               pPatch_buff[0] = 0;
+               pPatch_buff[0] = (NCI_MT_DATA|0x10)|p[len-1];
+               pPatch_buff[1] = 0x00;
+               if(p[len-3]>0xFC)
+               {
+                   pPatch_buff[2] = 0xFC;
+               }
+               else
+               {
+                   pPatch_buff[2] = p[len-3];
+               }
+
+               // calculate number of buffers which will be sent
+               nfc_hal_cb.dev_cb.number_of_patch_data_buffers = (prepatchdatalen)% (pPatch_buff[2]);
+               if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0)
+               {
+                   if(!((prepatchdatalen)/(pPatch_buff[2])))
+                   {
+                      /*This is the case when patch data length will be less than 252*/
+                      len = nfc_hal_cb.dev_cb.number_of_patch_data_buffers;
+                   }
+                   else
+                   {
+                      len = pPatch_buff[2];
+                   }
+                   nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((prepatchdatalen)/(pPatch_buff[2])+1);
+               }
+               else
+               {
+                   nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((prepatchdatalen)/(pPatch_buff[2]));
+               }
+
+               NCI_TRACE_DEBUG2("PATCH Update : First packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
+               memcpy(pPatch_buff+3,patchdata,len);
+               nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
+               nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+               nfc_hal_send_data(pPatch_buff,(len+NCI_MSG_HDR_SIZE),NULL);
+           }
+           else if(!nfc_hal_cb.dev_cb.patch_applied)
+           {
+               NCI_TRACE_DEBUG0("PATCH Update : Sending Patch data");
+               if(nfc_hal_cb.dev_cb.pre_patch_file_available == FALSE)
+               {
+                   /* acquire memory only when memory has not been acquired for pre patch data send in case when it is not vailable*/
+                   pPatch_buff = (UINT8*)malloc((p[len-3]+NCI_MSG_HDR_SIZE));
+               }
+               pPatch_buff[0] = 0;
+               pPatch_buff[0] = (NCI_MT_DATA|0x10)|p[len-1];           // Data packet header with PBF 1 and Conn ID
+               pPatch_buff[1] = 0x00;
+               if(p[len-3]>0xFC)
+               {
+                   pPatch_buff[2] = 0xFC;
+               }
+               else
+               {
+                   pPatch_buff[2] = p[len-3];
+               }
+               // calculate number of buffers which will be sent
+               nfc_hal_cb.dev_cb.number_of_patch_data_buffers = (patchdatalen)% (pPatch_buff[2]);
+               if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0)
+               {
+                   if(!((patchdatalen)/(pPatch_buff[2])))
+                   {
+                      /*This is the case when patch data length will be less than 252*/
+                      len = nfc_hal_cb.dev_cb.number_of_patch_data_buffers;
+                   }
+                   else
+                   {
+                      len = pPatch_buff[2];
+                   }
+                   nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((patchdatalen)/(pPatch_buff[2])+1);
+               }
+               else
+               {
+                   nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((patchdatalen)/(pPatch_buff[2]));
+               }
+               NCI_TRACE_DEBUG2("PATCH Update : First packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
+               memcpy(pPatch_buff+3,patchdata,len);
+               nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
+               nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+               nfc_hal_send_data(pPatch_buff,(len+NCI_MSG_HDR_SIZE),NULL);
+           }
+        }
+        else if(op_code == NCI_MSG_CORE_CONN_CREDITS)
+        {
+             // Patch data transfered
+             NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+             nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+             if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+             {
+                 if((p[len-1] == 0x01 /*NFCC_Credits_Avail*/) && (nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0))
+                 {
+                     if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers >= 2)
+                     {
+                         memcpy(pPatch_buff+3,(prepatchdata+nfc_hal_cb.dev_cb.patch_data_offset),pPatch_buff[2]);
+                         nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                         nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
+                         nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+                     }
+                     else
+                     {
+                         /*calculate last buffer length*/
+                         len = (prepatchdatalen)% (pPatch_buff[2]);
+                         *pPatch_buff &= 0x01;   //last packet
+                         *(pPatch_buff+2)= len;
+                         memcpy(pPatch_buff+3,(prepatchdata+nfc_hal_cb.dev_cb.patch_data_offset),len);
+
+                         NCI_TRACE_DEBUG2("PATCH Update : Last packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
+                         nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                         nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+
+                         /* close connection now*/
+                         nfc_hal_cb.dev_cb.pre_patch_applied = FALSE;
+                         nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                         NCI_TRACE_DEBUG0("PATCH Update : Last packet sent.Close connection");
+                         nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_close_cmd, 4, NULL);
+                    }
+                }
+            }
+            else
+            {
+                /* Further patch data send*/
+                if((p[len-1] == 0x01 /*NFCC_Credits_Avail*/) && (nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0))
+                {
+                    if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers >= 2)
+                    {
+                        memcpy(pPatch_buff+3,(patchdata+nfc_hal_cb.dev_cb.patch_data_offset),pPatch_buff[2]);
+                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                        nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
+                        nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+                    }
+                    else
+                    {
+                        /*calculate last buffer length*/
+                        len = (patchdatalen)% (pPatch_buff[2]);
+                        *pPatch_buff &= 0x01;   //last packet
+                        *(pPatch_buff+2)= len ;
+                        memcpy(pPatch_buff+3,(patchdata+nfc_hal_cb.dev_cb.patch_data_offset),len);
+                        NCI_TRACE_DEBUG2("PATCH Update : Last packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
+                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                        nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+
+                        /* close connection now*/
+                        nfc_hal_cb.dev_cb.patch_applied = FALSE;
+                        NCI_TRACE_DEBUG0("PATCH Update : Last packet sent.Close connection");
+                        nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                        nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_close_cmd, 4, NULL);
+                    }
+                }
+            }
+        }
+
+        else if(op_code == NCI_MSG_CORE_CONN_CLOSE)
+        {
+             if((!nfc_hal_cb.dev_cb.pre_patch_applied) ||(!nfc_hal_cb.dev_cb.patch_applied))
+             {
+                 if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+                 {
+                     NCI_TRACE_DEBUG0("PATCH Update : Pre patch data sending dynamic connection closed...Sending prop cmd to check pre patch signature again");
+                 }
+                 else
+                 {
+                     NCI_TRACE_DEBUG0("PATCH Update : Patch data sending dynamic connection closed...Sending prop cmd to check patch signature again");
+                 }
+
+                 NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+                 nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
+             }
+        }
+         }
+         else
+         {
+             if (p_cback)
+             {
+                 (*p_cback) ((tNFC_HAL_NCI_EVT) (op_code),
+                             p_msg->len,
+                             (UINT8 *) (p_msg + 1) + p_msg->offset);
+             }
+         }
+     }
+
+    if(patch_update_flag == TRUE)
+    {
+        if (gid == NCI_GID_PROP) /* this is for download patch */
+        {
+            if(nvm_update_flag)
+            {
+         /* check if more nvm updates are to be sent */
+        if(nfc_hal_cb.nvm.no_of_updates >0)
+        {
+            if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates >0))
+            {
+                /* frame cmd now*/
+                nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
+                if(nvmcmd)
+                {
+                    nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
+                    /* send nvm update cmd(NCI POKE) to NFCC*/
+                    nfc_hal_cb.nvm.no_of_updates--;
+                    nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
+                    free(nvmcmd);
+                    if(nfc_hal_cb.nvm.no_of_updates == 0)
+                    {
+                        /* All updates sent so close file now*/
+                        fclose(nfc_hal_cb.nvm.p_Nvm_file);
+                        nfc_hal_cb.nvm.p_Nvm_file = NULL;
+                        nfc_hal_cb.nvm.nvm_updated = TRUE;
+                    }
+                }
+                return;
+            }
+        }
+            }
+         if(nfc_hal_cb.nvm.nvm_updated == TRUE)
+         {
+             /* Patch download seq going on after nvm update.dynamic connection creation with NFCC for patch download*/
+             NCI_TRACE_DEBUG0("PATCH Update : Sending Prop Cmd to check patch signature");
+             NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+             nfc_hal_cb.nvm.nvm_updated = FALSE;
+             nfc_hal_cb.dev_cb.fw_version_chk = TRUE;
+             nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
+             return;
+         }
+
+        if(!nfc_hal_cb.dev_cb.patch_applied)
+        {
+            if(nfc_hal_cb.dev_cb.fw_version_chk)
+            {
+                if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+                {
+                    NCI_TRACE_DEBUG0("PATCH Update : Checking Prepatch Signature");
+                    patch_update = nfc_hal_check_signature_fw_ver_2(p,len,prepatchdata,prepatchdatalen);
+                    nfc_hal_cb.dev_cb.pre_patch_signature_chk = TRUE;
+                }
+                else
+                {
+                    /*Pre patch applied .Now checking patch signature*/
+                    NCI_TRACE_DEBUG0("PATCH Update : Checking patch Signature");
+                    patch_update = nfc_hal_check_signature_fw_ver_2(p,len,patchdata,patchdatalen);
+                    nfc_hal_cb.dev_cb.patch_signature_chk = TRUE;
+                }
+                if(patch_update == PATCH_NOT_UPDATED)
+                {
+                    /*create a dynamic logical connection with the NFCC to update the pre patch*/
+                    if(nfc_hal_cb.dev_cb.pre_patch_file_available)
+                    {
+                        NCI_TRACE_DEBUG0("PATCH Update : Prepatch file signature different..Create dynamic connection to update prepatch");
+                    }
+                    else
+                    {
+                        NCI_TRACE_DEBUG0("PATCH Update : Patch file signature different..Create dynamic connection to update patch");
+                    }
+                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_FOR_PATCH_DNLD);
+                    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_create_cmd, 8, NULL);
+                }
+                else
+                {
+                    /* prepatch applied successfully .open connection to apply patch mow */
+                    if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+                    {
+                        NCI_TRACE_DEBUG0("PATCH Update : Prepatch applied successfully..Create dynamic connection to update patch");
+                        nfc_hal_cb.dev_cb.pre_patch_applied = TRUE;
+                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
+                        nfc_hal_cb.dev_cb.patch_data_offset = 0;
+                        NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_FOR_PATCH_DNLD);
+                        nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_create_cmd, 8, NULL);
+                    }
+                    else
+                    {
+                        NCI_TRACE_DEBUG0("PATCH Update : Patch applied successfully..Pre Init Done");
+                        nfc_hal_cb.dev_cb.patch_applied = FALSE;
+                        nfc_hal_cb.dev_cb.pre_init_done = TRUE;
+                        nfc_hal_cb.dev_cb.pre_patch_signature_chk = FALSE;
+                        nfc_hal_cb.dev_cb.patch_signature_chk = FALSE;
+                        nfc_hal_cb.dev_cb.patch_data_offset = 0;
+                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
+                        free(pPatch_buff);
+                        free(prepatchdata);
+                        free(patchdata);
+                        prepatchdatalen = 0;
+                        patchdatalen = 0;
+                        NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
+                        HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
+                    }
+                }
+            }
+            if(!nfc_hal_cb.dev_cb.fw_version_chk)
+            {
+                NCI_TRACE_DEBUG0("PATCH Update : Checking FW Version");
+                patch_update = nfc_hal_check_firmware_version(p,len,patchdata,patchdatalen);
+                if(patch_update)
+                {
+                    /*Now send again the prop command to enquire about the patch info from NFCC*/
+                    NCI_TRACE_DEBUG0("PATCH Update : FW Version matched..Sending prop cmd again to verify signature");
+                    nfc_hal_cb.dev_cb.fw_version_chk = TRUE;
+                    patch_update = FALSE;          /*Reset flag for further signature test*/
+                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+                    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
+                }
+                else
+                {
+                    /*FW version is different from th NFCC.Wrong file.Discard it and continue with normal initialization*/
+                    NCI_TRACE_DEBUG0("PATCH Update : FW Version not matched..Start normal initialization");
+                    nfc_hal_cb.dev_cb.pre_patch_applied = FALSE;
+                    nfc_hal_cb.dev_cb.patch_applied = FALSE;
+                    nfc_hal_cb.dev_cb.pre_init_done = TRUE;
+                    nfc_hal_cb.dev_cb.pre_patch_signature_chk = FALSE;
+                    nfc_hal_cb.dev_cb.patch_signature_chk = FALSE;
+                    nfc_hal_cb.dev_cb.patch_data_offset = 0;
+                    nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
+                    free(pPatch_buff);
+                    free(prepatchdata);
+                    free(patchdata);
+                    prepatchdatalen = 0;
+                    patchdatalen = 0;
+                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
+                    HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
+                }
+            }
+            if(nfc_hal_cb.dev_cb.pre_init_done == TRUE)
+            {
+                nfc_hal_cb.dev_cb.fw_version_chk = FALSE;
+            }
+        }
         }
     }
-    else if (gid == NCI_GID_PROP) /* this is for download patch */
-    {
+
         if (mt == NCI_MT_NTF)
             op_code |= NCI_NTF_BIT;
         else
             op_code |= NCI_RSP_BIT;
 
-        if (nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_XTAL_SET)
-        {
-            if (op_code == (NCI_RSP_BIT|NCI_MSG_GET_XTAL_INDEX_FROM_DH))
-            {
-                /* wait for crystal setting in NFCC */
-                GKI_delay (100);
-
-                /* Crytal frequency configured. Proceed with start up sequence: send CORE_RESET_CMD */
-                nfc_hal_dm_send_reset_cmd ();
-            }
-        }
-        else if (  (op_code == NFC_VS_GET_BUILD_INFO_EVT)
+        if (  (op_code == NFC_VS_GET_BUILD_INFO_EVT)
                  &&(nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_BUILD_INFO)  )
         {
             p += NCI_BUILD_INFO_OFFSET_HWID;
@@ -596,7 +1598,6 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                                                     p_msg->len,
                                                     (UINT8 *) (p_msg + 1) + p_msg->offset);
         }
-    }
 }
 
 /*******************************************************************************
@@ -612,9 +1613,12 @@ void nfc_hal_dm_send_nci_cmd (const UINT8 *p_data, UINT16 len, tNFC_HAL_NCI_CBAC
 {
     NFC_HDR *p_buf;
     UINT8  *ps;
-
+    static int rst;
     NCI_TRACE_DEBUG1 ("nfc_hal_dm_send_nci_cmd (): nci_wait_rsp = 0x%x", nfc_hal_cb.ncit_cb.nci_wait_rsp);
-
+    if(p_data[0]==0x20 && p_data[1]==0)
+    {
+      rst= 1;
+    }
     if (nfc_hal_cb.ncit_cb.nci_wait_rsp != NFC_HAL_WAIT_RSP_NONE)
     {
         NCI_TRACE_ERROR0 ("nfc_hal_dm_send_nci_cmd(): no command window");
@@ -642,10 +1646,16 @@ void nfc_hal_dm_send_nci_cmd (const UINT8 *p_data, UINT16 len, tNFC_HAL_NCI_CBAC
         nfc_hal_cb.ncit_cb.p_vsc_cback = (void *)p_cback;
 
         nfc_hal_nci_send_cmd (p_buf);
-
-        /* start NFC command-timeout timer */
+        if(!rst)
+        { /* start NFC command-timeout timer */
         nfc_hal_main_start_quick_timer (&nfc_hal_cb.ncit_cb.nci_wait_rsp_timer, (UINT16)(NFC_HAL_TTYPE_NCI_WAIT_RSP),
                                         ((UINT32) NFC_HAL_CMD_TOUT) * QUICK_TIMER_TICKS_PER_SEC / 1000);
+        }
+        else
+        {
+          nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+          rst=0;
+        }
     }
 }
 
@@ -689,9 +1699,10 @@ void nfc_hal_dm_send_pend_cmd (void)
         p  = (UINT8 *) (p_buf + 1) + p_buf->offset;
         *p = HCIT_TYPE_COMMAND;
 
-        USERIAL_Write (USERIAL_NFC_PORT, p, p_buf->len);
+        DT_Nfc_Write (USERIAL_NFC_PORT, p, p_buf->len);
 
         GKI_freebuf (p_buf);
+
         nfc_hal_cb.ncit_cb.p_pend_cmd = NULL;
 
         /* start NFC command-timeout timer */
@@ -700,7 +1711,6 @@ void nfc_hal_dm_send_pend_cmd (void)
 
     }
 }
-
 /*******************************************************************************
 **
 ** Function         nfc_hal_dm_send_bt_cmd
@@ -768,11 +1778,6 @@ void nfc_hal_dm_set_nfc_wake (UINT8 cmd)
     **  NFC_HAL_LP_ACTIVE_HIGH (1)   NFC_HAL_ASSERT_NFC_WAKE (0)    pull up NFC_WAKE (VCC)
     **  NFC_HAL_LP_ACTIVE_HIGH (1)   NFC_HAL_DEASSERT_NFC_WAKE (1)  pull down NFC_WAKE (GND)
     */
-
-    if (cmd == nfc_hal_cb.dev_cb.nfc_wake_active_mode)
-        UPIO_Set (UPIO_GENERAL, NFC_HAL_LP_NFC_WAKE_GPIO, UPIO_OFF); /* pull down NFC_WAKE */
-    else
-        UPIO_Set (UPIO_GENERAL, NFC_HAL_LP_NFC_WAKE_GPIO, UPIO_ON);  /* pull up NFC_WAKE */
 }
 
 /*******************************************************************************
@@ -789,6 +1794,7 @@ void nfc_hal_dm_set_nfc_wake (UINT8 cmd)
 BOOLEAN nfc_hal_dm_power_mode_execute (tNFC_HAL_LP_EVT event)
 {
     BOOLEAN send_to_nfcc = FALSE;
+
 
     NCI_TRACE_DEBUG1 ("nfc_hal_dm_power_mode_execute () event = %d", event);
 
@@ -855,7 +1861,7 @@ void nfc_hal_dm_pre_init_nfcc (void)
 
     if (nfc_post_reset_cb.dev_init_config.flags & NFC_HAL_DEV_INIT_FLAGS_SET_XTAL_FREQ)
     {
-        nfc_hal_dm_set_xtal_freq_index ();
+        //nfc_hal_dm_set_xtal_freq_index ();
     }
     else
     {
@@ -970,7 +1976,6 @@ tHAL_NFC_STATUS HAL_NfcReInit (tNFC_HAL_NCI_CBACK *p_cback)
         nfc_hal_cb.p_reinit_cback = p_cback;
 
         nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_reset_cmd, NCI_MSG_HDR_SIZE + NCI_CORE_PARAM_SIZE_RESET, NULL);
-        status = HAL_NFC_STATUS_OK;
     }
     return status;
 }

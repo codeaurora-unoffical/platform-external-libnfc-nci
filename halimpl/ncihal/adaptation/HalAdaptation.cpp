@@ -1,4 +1,9 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -23,7 +28,7 @@
  *  Broadcom-specific features to the Android framework.
  *
  ******************************************************************************/
-#define LOG_TAG "NfcNciHal"
+#define LOG_TAG "NfcHal"
 #include "OverrideLog.h"
 #include "HalAdaptation.h"
 #include "SyncEvent.h"
@@ -46,29 +51,20 @@ static SyncEvent gCloseCompletedEvent;
 
 UINT32 ScrProtocolTraceFlag = SCR_PROTO_TRACE_ALL; //0x017F00;
 
-static void BroadcomHalCallback (UINT8 event, tHAL_NFC_STATUS status);
-static void BroadcomHalDataCallback (UINT16 data_len, UINT8* p_data);
+static void NfcHalCallback (UINT8 event, tHAL_NFC_STATUS status);
+static void NfcHalDataCallback (UINT16 data_len, UINT8* p_data);
 
 
 ///////////////////////////////////////
 
 
-int HaiInitializeLibrary (const bcm2079x_dev_t* device)
+int HaiInitializeLibrary (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
-    unsigned long freq = 0;
     unsigned long num = 0;
 
     InitializeGlobalAppLogLevel ();
-
-    //initialize the crystal frequency
-    if (GetNumValue((char*)NAME_XTAL_FREQUENCY, &freq, sizeof(freq)))
-    {
-        ALOGD("%s: setting xtal frequency=%lu", __FUNCTION__, freq);
-        nfc_post_reset_cb.dev_init_config.xtal_freq = (UINT16) freq;
-        nfc_post_reset_cb.dev_init_config.flags |= NFC_HAL_DEV_INIT_FLAGS_SET_XTAL_FREQ;
-    }
 
     // Initialize protocol logging level
     if ( GetNumValue ( NAME_PROTOCOL_TRACE_LEVEL, &num, sizeof ( num ) ) )
@@ -102,7 +98,7 @@ int HaiTerminateLibrary ()
 }
 
 
-int HaiOpen (const bcm2079x_dev_t* device, nfc_stack_callback_t* halCallbackFunc, nfc_stack_data_callback_t* halDataCallbackFunc)
+int HaiOpen (const nfc_dev_t* device, nfc_stack_callback_t* halCallbackFunc, nfc_stack_data_callback_t* halDataCallbackFunc)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -111,7 +107,7 @@ int HaiOpen (const bcm2079x_dev_t* device, nfc_stack_callback_t* halCallbackFunc
     gAndroidHalDataCallback = halDataCallbackFunc;
 
     SyncEventGuard guard (gOpenCompletedEvent);
-    HAL_NfcOpen (BroadcomHalCallback, BroadcomHalDataCallback);
+    HAL_NfcOpen (NfcHalCallback, NfcHalDataCallback);
     gOpenCompletedEvent.wait ();
 
     retval = 0;
@@ -120,7 +116,7 @@ int HaiOpen (const bcm2079x_dev_t* device, nfc_stack_callback_t* halCallbackFunc
 }
 
 
-void BroadcomHalCallback (UINT8 event, tHAL_NFC_STATUS status)
+void NfcHalCallback (UINT8 event, tHAL_NFC_STATUS status)
 {
     ALOGD ("%s: enter; event=0x%X", __FUNCTION__, event);
     switch (event)
@@ -172,14 +168,14 @@ void BroadcomHalCallback (UINT8 event, tHAL_NFC_STATUS status)
 }
 
 
-void BroadcomHalDataCallback (UINT16 data_len, UINT8* p_data)
+void NfcHalDataCallback (UINT16 data_len, UINT8* p_data)
 {
     ALOGD ("%s: enter; len=%u", __FUNCTION__, data_len);
     gAndroidHalDataCallback (data_len, p_data);
 }
 
 
-int HaiClose (const bcm2079x_dev_t* device)
+int HaiClose (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -193,7 +189,7 @@ int HaiClose (const bcm2079x_dev_t* device)
 }
 
 
-int HaiCoreInitialized (const bcm2079x_dev_t* device, uint8_t* coreInitResponseParams)
+int HaiCoreInitialized (const nfc_dev_t* device, uint8_t* coreInitResponseParams)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -207,7 +203,7 @@ int HaiCoreInitialized (const bcm2079x_dev_t* device, uint8_t* coreInitResponseP
 }
 
 
-int HaiWrite (const bcm2079x_dev_t* dev, uint16_t dataLen, const uint8_t* data)
+int HaiWrite (const nfc_dev_t* dev, uint16_t dataLen, const uint8_t* data)
 {
     ALOGD ("%s: enter; len=%u", __FUNCTION__, dataLen);
     int retval = EACCES;
@@ -219,7 +215,7 @@ int HaiWrite (const bcm2079x_dev_t* dev, uint16_t dataLen, const uint8_t* data)
 }
 
 
-int HaiPreDiscover (const bcm2079x_dev_t* device)
+int HaiPreDiscover (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -231,7 +227,7 @@ int HaiPreDiscover (const bcm2079x_dev_t* device)
 }
 
 
-int HaiControlGranted (const bcm2079x_dev_t* device)
+int HaiControlGranted (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -243,7 +239,7 @@ int HaiControlGranted (const bcm2079x_dev_t* device)
 }
 
 
-int HaiPowerCycle (const bcm2079x_dev_t* device)
+int HaiPowerCycle (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;

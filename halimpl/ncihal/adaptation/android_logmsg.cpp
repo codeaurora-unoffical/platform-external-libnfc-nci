@@ -1,4 +1,9 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -53,7 +58,7 @@ void LogMsg (UINT32 trace_set_mask, const char *fmt_str, ...)
     va_end (ap);
     if (trace_type == TRACE_TYPE_ERROR)
         android_log_type = ANDROID_LOG_ERROR;
-    __android_log_write (android_log_type, "NfcNciHal", buffer);
+    __android_log_write (android_log_type, "NfcHal", buffer);
 }
 
 
@@ -73,7 +78,7 @@ void DispNci (UINT8 *data, UINT16 len, BOOLEAN is_recv)
     }
     line_buf[j] = '\0';
 
-    __android_log_write(ANDROID_LOG_DEBUG, (is_recv) ? "BrcmNciR": "BrcmNciX", line_buf);
+    __android_log_write(ANDROID_LOG_DEBUG, (is_recv) ? "NfcNciRx": "NfcNciTx", line_buf);
 }
 
 
@@ -98,7 +103,7 @@ void DispHciCmd (BT_HDR *p_buf)
     }
     log_line[j] = '\0';
 
-    __android_log_write(ANDROID_LOG_DEBUG, "BrcmHciX", log_line);
+    __android_log_write(ANDROID_LOG_DEBUG, "NfcHciTx", log_line);
 }
 
 
@@ -123,5 +128,5 @@ void DispHciEvt (BT_HDR *p_buf)
     }
     log_line[j] = '\0';
 
-    __android_log_write(ANDROID_LOG_DEBUG, "BrcmHciR", log_line);
+    __android_log_write(ANDROID_LOG_DEBUG, "NfcHciRx", log_line);
 }

@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -21,7 +25,7 @@
  *  Encapsulate a condition variable for thread synchronization.
  *
  ******************************************************************************/
-#define LOG_TAG "NfcNciHal"
+#define LOG_TAG "NfcHal"
 #include "OverrideLog.h"
 #include "CondVar.h"
 #include <errno.h>

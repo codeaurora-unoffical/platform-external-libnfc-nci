@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -225,7 +229,7 @@
 
 /* the maximum number of NFCEE interface supported */
 #ifndef NFC_MAX_EE_INTERFACE
-#define NFC_MAX_EE_INTERFACE        3
+#define NFC_MAX_EE_INTERFACE        4
 #endif
 
 /* the maximum number of NFCEE information supported. */
@@ -553,7 +557,7 @@
 
 /* Timeout for waiting for the response to HCP Command packet */
 #ifndef NFA_HCI_CMD_RSP_TIMEOUT
-#define NFA_HCI_CMD_RSP_TIMEOUT    1000
+#define NFA_HCI_CMD_RSP_TIMEOUT    3000
 #endif
 
 /* Default poll duration (may be over-ridden using NFA_SetRfDiscoveryDuration) */
@@ -656,7 +660,7 @@
 
 /* Max number of NFCEE supported */
 #ifndef NFA_EE_MAX_EE_SUPPORTED
-#define NFA_EE_MAX_EE_SUPPORTED         3
+#define NFA_EE_MAX_EE_SUPPORTED         4
 #endif
 
 /* Maximum number of AID entries per target_handle  */
@@ -666,7 +670,7 @@
 
 /* Maximum number of callback functions can be registered through NFA_EeRegister() */
 #ifndef NFA_EE_MAX_CBACKS
-#define NFA_EE_MAX_CBACKS           (3)
+#define NFA_EE_MAX_CBACKS           (4)
 #endif
 
 #ifndef NFA_DTA_INCLUDED

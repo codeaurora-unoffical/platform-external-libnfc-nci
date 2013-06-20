@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -25,7 +29,7 @@
 #include "OverrideLog.h"
 #include <cutils/properties.h>
 #include "config.h"
-#define LOG_TAG "NfcNciHal"
+#define LOG_TAG "NfcHal"
 
 
 unsigned char appl_trace_level = BT_TRACE_LEVEL_DEBUG;
@@ -54,7 +58,7 @@ unsigned char InitializeGlobalAppLogLevel ()
 
     GetNumValue (NAME_APPL_TRACE_LEVEL, &num, sizeof(num));
     appl_trace_level = (unsigned char) num;
-    
+
     int len = property_get ("nfc.app_log_level", valueStr, "");
     if (len > 0)
     {

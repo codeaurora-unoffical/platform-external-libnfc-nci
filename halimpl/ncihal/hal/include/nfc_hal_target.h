@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -45,11 +49,6 @@
 /* Number of bytes to reserve in front of NCI messages (e.g. for transport header) */
 #ifndef NFC_HAL_NCI_MSG_OFFSET_SIZE
 #define NFC_HAL_NCI_MSG_OFFSET_SIZE             1
-#endif
-
-/* NFC-WAKE */
-#ifndef NFC_HAL_LP_NFC_WAKE_GPIO
-#define NFC_HAL_LP_NFC_WAKE_GPIO                UPIO_GENERAL3
 #endif
 
 /* NFCC snooze mode idle timeout before deassert NFC_WAKE in ms */
