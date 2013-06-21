@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2010-2012 Broadcom Corporation
  *
@@ -24,8 +28,13 @@
 #include <string.h>
 #include "nfc_hal_int.h"
 #include "userial.h"
-#include "upio.h"
 
+#include <DT_Nfc_link.h>
+#include <DT_Nfc_types.h>
+#include <DT_Nfc_status.h>
+#include <DT_Nfc_i2c.h>
+#include <DT_Nfc_log.h>
+#include <DT_Nfc.h>
 /****************************************************************************
 ** Definitions
 ****************************************************************************/
@@ -94,6 +103,12 @@ void nfc_hal_main_init (void)
 ** Returns          nothing
 **
 *******************************************************************************/
+
+
+static DT_Nfc_sConfig_t     gDrvCfg;
+void                        *gHwRef;
+
+
 static void nfc_hal_main_open_transport (void)
 {
     tUSERIAL_OPEN_CFG open_cfg;
@@ -113,9 +128,15 @@ static void nfc_hal_main_open_transport (void)
     open_cfg.fc     = nfc_hal_trans_cfg.userial_fc;
     open_cfg.buf    = USERIAL_BUF_BYTE;
 
-    USERIAL_Open (USERIAL_NFC_PORT, &open_cfg, nfc_hal_main_userial_cback);
 
-    /* notify transport openned */
+    gDrvCfg.nRef    = 1; //dummy value as not used here
+    gDrvCfg.devFile = "/dev/nfc-nci";
+    gDrvCfg.phyType = ENUM_LINK_TYPE_I2C;
+    if(gHwRef== NULL){
+        gHwRef= (void *)malloc(4024);
+    }
+    DT_Nfc_Open(&gDrvCfg, &gHwRef, &nfc_hal_main_userial_cback);
+    /* notify transport opened */
     nfc_hal_dm_pre_init_nfcc ();
 }
 
@@ -180,6 +201,18 @@ static void nfc_hal_main_userial_cback (tUSERIAL_PORT port, tUSERIAL_EVT evt, tU
 
 /*******************************************************************************
 **
+** Function         nfc_hal_main_i2c_cback
+**
+** Description      callback for NCI transport
+**
+** Returns          nothing
+**
+*******************************************************************************/
+static void nfc_hal_main_i2c_cback (tUSERIAL_PORT port, tUSERIAL_EVT evt, tUSERIAL_EVT_DATA *p_data)
+{
+}
+/*******************************************************************************
+**
 ** Function         nfc_hal_main_pre_init_done
 **
 ** Description      notify complete of pre-initialization
@@ -196,7 +229,12 @@ void nfc_hal_main_pre_init_done (tHAL_NFC_STATUS status)
         nfc_hal_main_handle_terminate ();
 
         /* Close uart */
-        USERIAL_Close (USERIAL_NFC_PORT);
+
+        gDrvCfg.nRef        = 0;
+        gDrvCfg.devFile     = "/dev/nfc-nci";
+        gDrvCfg.phyType     = ENUM_LINK_TYPE_NONE;
+        DT_Nfc_Close(&gDrvCfg);
+
     }
 
     /* Notify NFC Task the status of initialization */
@@ -306,7 +344,7 @@ void nfc_hal_main_start_quick_timer (TIMER_LIST_ENT *p_tle, UINT16 type, UINT32 
         }
         else
         {
-            GKI_start_timer (NFC_HAL_QUICK_TIMER_ID, ((GKI_SECS_TO_TICKS (1) / QUICK_TIMER_TICKS_PER_SEC)), TRUE);
+            GKI_start_timer (NFC_HAL_QUICK_TIMER_ID, ((GKI_SECS_TO_TICKS (8000) / QUICK_TIMER_TICKS_PER_SEC)), TRUE);
         }
     }
 
@@ -400,7 +438,6 @@ static void nfc_hal_main_send_message (NFC_HDR *p_msg)
          * and data credit is available; just send it */
 
         /* add NCI packet type in front of message */
-        nfc_hal_nci_add_nfc_pkt_type (p_msg);
 
         /* send this packet to transport */
         ps = (UINT8 *) (p_msg + 1) + p_msg->offset;
@@ -408,11 +445,11 @@ static void nfc_hal_main_send_message (NFC_HDR *p_msg)
         delta = p_msg->len - len;
         DISP_NCI (ps + delta, (UINT16) (p_msg->len - delta), FALSE);
 #endif
-        USERIAL_Write (USERIAL_NFC_PORT, ps, p_msg->len);
+        DT_Nfc_Write (USERIAL_NFC_PORT, ps, p_msg->len);
+
         GKI_freebuf (p_msg);
     }
 }
-
 /*******************************************************************************
 **
 ** Function         nfc_hal_main_task
@@ -433,6 +470,9 @@ UINT32 nfc_hal_main_task (UINT32 param)
 
     NCI_TRACE_DEBUG0 ("NFC_HAL_TASK started");
 
+    gDrvCfg.nRef    = 0;
+    gDrvCfg.devFile = "/dev/nfc-nci";
+    gDrvCfg.phyType = ENUM_LINK_TYPE_NONE;
     /* Main loop */
     while (TRUE)
     {
@@ -451,10 +491,8 @@ UINT32 nfc_hal_main_task (UINT32 param)
         {
             NCI_TRACE_DEBUG0 ("NFC_HAL_TASK got NFC_HAL_TASK_EVT_TERMINATE");
             nfc_hal_main_handle_terminate ();
-
             /* Close uart */
-            USERIAL_Close (USERIAL_NFC_PORT);
-
+            DT_Nfc_Close(&gDrvCfg);
             nfc_hal_cb.p_stack_cback (HAL_NFC_CLOSE_CPLT_EVT, HAL_NFC_STATUS_OK);
             nfc_hal_cb.p_stack_cback = NULL;
             continue;
@@ -465,10 +503,7 @@ UINT32 nfc_hal_main_task (UINT32 param)
         {
             NCI_TRACE_DEBUG0 ("NFC_HAL_TASK got NFC_HAL_TASK_EVT_POWER_CYCLE");
             nfc_hal_main_handle_terminate ();
-
-            /* Close uart */
-            USERIAL_Close (USERIAL_NFC_PORT);
-
+            DT_Nfc_Close(&gDrvCfg);
             /* power cycle timeout */
             nfc_hal_cb.timer.p_cback = nfc_hal_main_timeout_cback;
             nfc_hal_main_start_quick_timer (&nfc_hal_cb.timer, NFC_HAL_TTYPE_POWER_CYCLE,
@@ -491,7 +526,7 @@ UINT32 nfc_hal_main_task (UINT32 param)
                     break;
 
                 case NFC_HAL_EVT_POST_CORE_RESET:
-                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_POST_INIT_DONE);
+                     NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_IDLE);
 
                     /* set NCI Control packet size from CORE_INIT_RSP */
                     p = (UINT8 *) (p_msg + 1) + p_msg->offset + NCI_MSG_HDR_SIZE;
@@ -504,7 +539,11 @@ UINT32 nfc_hal_main_task (UINT32 param)
                     nfc_hal_cb.dev_cb.next_dm_config = NFC_HAL_DM_CONFIG_LPTD;
                     nfc_hal_cb.dev_cb.next_startup_vsc = 1;
 
-                    nfc_hal_dm_config_nfcc ();
+                    if(nfc_hal_cb.nvm.no_of_updates == 0)
+                    {
+                        NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_POST_INIT_DONE);
+                        nfc_hal_dm_config_nfcc ();
+                    }
                     break;
 
                 case NFC_HAL_EVT_TO_START_QUICK_TIMER:
@@ -528,19 +567,10 @@ UINT32 nfc_hal_main_task (UINT32 param)
                     GKI_freebuf (p_msg);
             }
         }
-
-        /* Data waiting to be read from serial port */
-        if (event & NFC_HAL_TASK_EVT_DATA_RDY)
+        if ((event & NFC_HAL_TASK_EVT_DATA_RDY) || ( DT_unprocessed_data() > 0))
         {
-            while (TRUE)
-            {
-                /* Read one byte to see if there is anything waiting to be read */
-                if (USERIAL_Read (USERIAL_NFC_PORT, &byte, 1) == 0)
-                {
-                    break;
-                }
-
-                if (nfc_hal_nci_receive_msg (byte))
+            do{
+                if (nfc_hal_nci_receive_msg ())
                 {
                     /* complete of receiving NCI message */
                     nfc_hal_nci_assemble_nci_msg ();
@@ -561,9 +591,8 @@ UINT32 nfc_hal_main_task (UINT32 param)
                         nfc_hal_cb.ncit_cb.p_rcv_msg = NULL;
                     }
                 }
-            } /* while (TRUE) */
+            }while(DT_unprocessed_data() > 0);
         }
-
         /* Process quick timer tick */
         if (event & NFC_HAL_QUICK_TIMER_EVT_MASK)
         {

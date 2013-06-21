@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2009-2012 Broadcom Corporation
  *
@@ -27,26 +31,6 @@
 /****************************************************************************
 ** Device Configuration definitions
 ****************************************************************************/
-
-#define NFC_HAL_PLL_325_SETCONFIG_PARAM_LEN     (2 + NCI_PARAM_LEN_PLL325_CFG_PARAM)
-
-/* Crystal Frequency Index (in 1 KHz) */
-enum
-{
-    NFC_HAL_XTAL_INDEX_9600,
-    NFC_HAL_XTAL_INDEX_13000,
-    NFC_HAL_XTAL_INDEX_16200,
-    NFC_HAL_XTAL_INDEX_19200,
-    NFC_HAL_XTAL_INDEX_24000,
-    NFC_HAL_XTAL_INDEX_26000,
-    NFC_HAL_XTAL_INDEX_38400,
-    NFC_HAL_XTAL_INDEX_52000,
-    NFC_HAL_XTAL_INDEX_37400,
-    NFC_HAL_XTAL_INDEX_MAX
-};
-typedef UINT8 tNFC_HAL_XTAL_INDEX;
-
-/* Broadcom specific device initialization before sending NCI reset */
 #define NFC_HAL_DEV_INIT_FLAGS_SET_XTAL_FREQ  0x02    /* set crystal frequency    */
 typedef UINT8 tNFC_HAL_DEV_INIT_FLAGS;
 

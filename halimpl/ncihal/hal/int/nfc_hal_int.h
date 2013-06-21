@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2009-2012 Broadcom Corporation
  *
@@ -31,11 +35,15 @@
 #include "nfc_brcm_defs.h"
 #include "nfc_hal_api.h"
 #include "nfc_hal_int_api.h"
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+/****************************************************************************
+** Macros to enable patching for FW version 1.0 or 2.0
+****************************************************************************/
+//#define PREV_LOGGING_MECH     /*This defnition will enable the previous DT logs and corresponding mechanism*/
 /****************************************************************************
 ** NFC HAL TASK transport definitions
 ****************************************************************************/
@@ -44,7 +52,6 @@ extern "C" {
 #define NFC_HAL_TASK_EVT_INITIALIZE             EVENT_MASK (APPL_EVT_5)
 #define NFC_HAL_TASK_EVT_TERMINATE              EVENT_MASK (APPL_EVT_6)
 #define NFC_HAL_TASK_EVT_POWER_CYCLE            EVENT_MASK (APPL_EVT_7)
-
 #define NFC_HAL_TASK_EVT_MBOX                   (TASK_MBOX_0_EVT_MASK)
 
 /* NFC HAL Task mailbox definitions */
@@ -124,6 +131,14 @@ extern NFC_HAL_TRANS_CFG_QUALIFIER tNFC_HAL_TRANS_CFG nfc_hal_trans_cfg;
 #define HCI_BRCM_UPDATE_BAUD_RATE_UNENCODED_LENGTH      0x06
 #define HCIE_PREAMBLE_SIZE                  2
 
+/*****************************************************************************
+*  NVM Update related defnitions
+*****************************************************************************/
+#define NUM_OF_BYTES_ACCESS_FLAG         0x01
+#define NUM_OF_BYTES_START_ADDR          0x04
+#define NUM_OF_BYTES_NUMBER_OF_ITEMS     0x01
+#define NUM_OF_BYTES_ADD_DELTA           0x01
+#define NUM_OF_BYTES_ACCESS_DELAY        0x02
 /****************************************************************************
 ** Internal constants and definitions
 ****************************************************************************/
@@ -198,7 +213,8 @@ enum
     NFC_HAL_INIT_STATE_W4_CONTROL_DONE,    /* Waiting for control release           */
     NFC_HAL_INIT_STATE_W4_PREDISCOVER_DONE,/* Waiting for complete of prediscover   */
     NFC_HAL_INIT_STATE_W4_RE_INIT,         /* Waiting for reset rsp on ReInit       */
-    NFC_HAL_INIT_STATE_CLOSING             /* Shutting down                         */
+    NFC_HAL_INIT_STATE_CLOSING,             /* Shutting down                         */
+    NFC_HAL_INIT_FOR_PATCH_DNLD             /* hal init for patch download to happen*/
 };
 typedef UINT8 tNFC_HAL_INIT_STATE;
 
@@ -319,6 +335,13 @@ typedef struct
     UINT32              patchram_delay;         /* the dealy after patch */
 } tNFC_HAL_PRM_CB;
 
+typedef struct
+{
+    /*nvm update related */
+    FILE  *p_Nvm_file;
+    UINT16 no_of_updates;
+    UINT8 nvm_updated;
+} tNFC_HAL_NVM_CB;
 /* Patch for I2C fix */
 typedef struct
 {
@@ -361,6 +384,16 @@ typedef struct
 
 
     tHAL_NFC_STATUS_CBACK   *p_prop_cback;          /* callback to notify complete of proprietary update */
+    UINT8                    patch_applied;
+    UINT8                    fw_version_chk;                  /*Flag to indicate if FW version check is done or not */
+    UINT8                    pre_patch_signature_chk;         /*Flag to indicate if pre patch signature check is done or not */
+    UINT8                    patch_signature_chk;             /*Flag to indicate if patch signature check is done or not */
+    UINT8                    pre_patch_applied;               /* Flag to keep track if pre patch applied or not */
+    UINT8                    pre_init_done;                   /* Flag to keep track on pre init process completion in case of patch dnld*/
+    UINT32                   patch_data_offset;               /* Offset of patch data*/
+    UINT32                   number_of_patch_data_buffers;
+    UINT8                    pre_patch_file_available;       /* This flag will be set if pre patch file is available*/
+    UINT8                    patch_file_available;           /* This flag will be set if patch file is available*/
 } tNFC_HAL_DEV_CB;
 
 /* data members for NFC_HAL-HCI */
@@ -397,6 +430,7 @@ typedef struct
     tNFC_HAL_NCI_CBACK      *p_reinit_cback;
     UINT8                   max_rf_credits;     /* NFC Max RF data credits */
     UINT8                   trace_level;        /* NFC HAL trace level */
+    tNFC_HAL_NVM_CB         nvm;                /* NVM update CB(control block)*/
 } tNFC_HAL_CB;
 
 /* Global NCI data */
@@ -420,7 +454,7 @@ void   nfc_hal_main_stop_quick_timer (TIMER_LIST_ENT *p_tle);
 void   nfc_hal_main_send_error (tHAL_NFC_STATUS status);
 
 /* nfc_hal_nci.c */
-BOOLEAN nfc_hal_nci_receive_msg (UINT8 byte);
+BOOLEAN nfc_hal_nci_receive_msg (void);
 BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg);
 void    nfc_hal_nci_assemble_nci_msg (void);
 void    nfc_hal_nci_add_nfc_pkt_type (NFC_HDR *p_msg);
@@ -429,7 +463,6 @@ void    nfc_hal_nci_cmd_timeout_cback (void *p_tle);
 
 /* nfc_hal_dm.c */
 void nfc_hal_dm_init (void);
-void nfc_hal_dm_set_xtal_freq_index (void);
 void nfc_hal_dm_send_reset_cmd (void);
 void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg);
 void nfc_hal_dm_config_nfcc (void);
@@ -440,6 +473,8 @@ void nfc_hal_dm_pre_init_nfcc (void);
 void nfc_hal_dm_shutting_down_nfcc (void);
 BOOLEAN nfc_hal_dm_power_mode_execute (tNFC_HAL_LP_EVT event);
 void nfc_hal_dm_send_pend_cmd (void);
+int nfc_hal_dm_check_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen);
+void nfc_hal_dm_frame_mem_access_cmd(UINT8 *nvmpokecmd,UINT8 *nvmupdatebuff,UINT8 *nvmpokecmdlen);
 
 /* nfc_hal_prm.c */
 void nfc_hal_prm_spd_reset_ntf (UINT8 reset_reason, UINT8 reset_type);

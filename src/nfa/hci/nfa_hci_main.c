@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2010-2012 Broadcom Corporation
  *
@@ -461,7 +465,7 @@ void nfa_hci_startup (void)
     }
 
     /* We can only start up if NV Ram is read and EE discovery is complete */
-    if (nfa_hci_cb.nv_read_cmplt && nfa_hci_cb.ee_disc_cmplt && (nfa_hci_cb.conn_id == 0))
+    if (/*nfa_hci_cb.nv_read_cmplt && */nfa_hci_cb.ee_disc_cmplt && (nfa_hci_cb.conn_id == 0))
     {
         NFA_EeGetInfo (&num_nfcee, ee_info);
         nfa_hci_cb.num_nfcee = num_nfcee;
@@ -510,8 +514,6 @@ static void nfa_hci_sys_enable (void)
 {
     NFA_TRACE_DEBUG0 ("nfa_hci_sys_enable ()");
     nfa_ee_reg_cback_enable_done (&nfa_hci_ee_info_cback);
-
-    nfa_nv_co_read ((UINT8 *)&nfa_hci_cb.cfg, sizeof (nfa_hci_cb.cfg),DH_NV_BLOCK);
     nfa_sys_start_timer (&nfa_hci_cb.timer, NFA_HCI_RSP_TIMEOUT_EVT, NFA_HCI_NV_READ_TIMEOUT_VAL);
 }
 
@@ -1045,12 +1047,6 @@ static BOOLEAN nfa_hci_evt_hdlr (BT_HDR *p_msg)
 
     if (nfa_hciu_is_no_host_resetting ())
         nfa_hci_check_pending_api_requests ();
-
-    if ((nfa_hci_cb.hci_state == NFA_HCI_STATE_IDLE) && (nfa_hci_cb.nv_write_needed))
-    {
-        nfa_hci_cb.nv_write_needed = FALSE;
-        nfa_nv_co_write ((UINT8 *)&nfa_hci_cb.cfg, sizeof (nfa_hci_cb.cfg),DH_NV_BLOCK);
-    }
 
     return FALSE;
 }

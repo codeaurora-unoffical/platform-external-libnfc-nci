@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -24,9 +28,8 @@ extern "C"
     #include "nfc_hal_post_reset.h"
 }
 #include <string>
-#include "spdhelper.h"
 
-#define LOG_TAG "NfcNciHal"
+#define LOG_TAG "NfcHal"
 
 /* Location of patchfiles */
 #ifndef NFCA_PATCHFILE_LOCATION
@@ -38,11 +41,26 @@ extern "C"
 #define NFA_CONFIG_FORMAT                   "NFA_CONFIG_FORMAT"
 #define MAX_RF_DATA_CREDITS                 "MAX_RF_DATA_CREDITS"
 
+#define TOTAL_LENGTH_OCTETS                  4
+#define PATCH_LENGTH_OCTETS                  4
+#define FW_VERSION_OCTETS                    2
+#define PATCH_OCTETS                         2
+#define SIG_ALGORITHM_OCTETS                 1
+#define RESERVED_OCTETS                      4
+#define PUBLIC_KEY_LENGTH_OCTETS             2
+#define SIGNATURE_LENGTH_OCTETS              2
+#define PRE_PATCH_EXISTS_OCTETS              2
+#define SIGNATURE_LENGTH                     72
+#define FW_VERSION_OFFSET                    2
+#define PATCH_NOT_UPDATED                    3
+#define PATCH_UPDATED                        4
 #define MAX_BUFFER      (512)
 static char sPrePatchFn[MAX_BUFFER+1];
 static char sPatchFn[MAX_BUFFER+1];
 static void * sPrmBuf = NULL;
 static void * sI2cFixPrmBuf = NULL;
+
+
 
 #define NFA_DM_START_UP_CFG_PARAM_MAX_LEN   100
 static UINT8 nfa_dm_start_up_cfg[NFA_DM_START_UP_CFG_PARAM_MAX_LEN];
@@ -58,9 +76,9 @@ static void HalNciCallback (tNFC_HAL_NCI_EVT event, UINT16 data_len, UINT8 *p_da
 
 tNFC_POST_RESET_CB nfc_post_reset_cb =
 {
-    "/vendor/firmware/bcm2079x_firmware.ncd",
+    "/vendor/firmware/firmware.ncd",
     NULL,
-    "/vendor/firmware/bcm2079x_pre_firmware.ncd",
+    "/vendor/firmware/pre_firmware.ncd",
     NULL,
     NFC_HAL_DEFAULT_BAUD,
 
@@ -177,22 +195,6 @@ static void postDownloadPatchram(tHAL_NFC_STATUS status)
     if (status != HAL_NFC_STATUS_OK)
     {
         ALOGE("Patch download failed");
-        if (status == HAL_NFC_STATUS_REFUSED)
-        {
-            SpdHelper::setPatchAsBad();
-        }
-        else
-            SpdHelper::incErrorCount();
-
-        /* If in SPD Debug mode, fail immediately and obviously */
-        if (SpdHelper::isSpdDebug())
-            HAL_NfcPreInitDone (HAL_NFC_STATUS_FAILED);
-        else
-        {
-            /* otherwise, power cycle the chip and let the stack startup normally */
-            USERIAL_PowerupDevice(0);
-            HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
-        }
     }
     /* Set snooze mode here */
     else if (gSnoozeModeCfg.snooze_mode != NFC_HAL_LP_SNOOZE_MODE_NONE)
@@ -323,7 +325,7 @@ static void StartPatchDownload(UINT32 chipid)
     ALOGD ("%s: chipid=%lx",__FUNCTION__, chipid);
 
     char chipID[30];
-    sprintf(chipID, "%lx", chipid);
+    snprintf(chipID, 30, "%lx", chipid);
     ALOGD ("%s: chidId=%s", __FUNCTION__, chipID);
 
     readOptionalConfig(chipID);     // Read optional chip specific settings
@@ -384,13 +386,9 @@ static void StartPatchDownload(UINT32 chipid)
                 if ((sPrmBuf = malloc(lenPrmBuffer)) != NULL)
                 {
                     fread(sPrmBuf, lenPrmBuffer, 1, fd);
-
-                    if (!SpdHelper::isPatchBad((UINT8*)sPrmBuf, lenPrmBuffer))
-                    {
-                        /* Download patch using static memeory mode */
-                        HAL_NfcPrmDownloadStart(patch_format, 0, (UINT8*)sPrmBuf, lenPrmBuffer, 0, prmCallback);
-                        bDownloadStarted = true;
-                    }
+                    /* Download patch using static memeory mode */
+                    HAL_NfcPrmDownloadStart(patch_format, 0, (UINT8*)sPrmBuf, lenPrmBuffer, 0, prmCallback);
+                    bDownloadStarted = true;
                 }
                 else
                     ALOGE("%s Unable to buffer to hold patchram (%lu bytes)", __FUNCTION__, lenPrmBuffer);
@@ -404,8 +402,7 @@ static void StartPatchDownload(UINT32 chipid)
             if (!bDownloadStarted)
             {
                 /* If debug mode, fail in an obvious way, otherwise try to start stack */
-                postDownloadPatchram(SpdHelper::isSpdDebug() ? HAL_NFC_STATUS_FAILED :
-                        HAL_NFC_STATUS_OK);
+                postDownloadPatchram(HAL_NFC_STATUS_OK);
             }
         }
         else
@@ -428,22 +425,21 @@ static void StartPatchDownload(UINT32 chipid)
 ** Returns:     none
 **
 *******************************************************************************/
-void nfc_hal_post_reset_init (UINT32 brcm_hw_id, UINT8 nvm_type)
+void nfc_hal_post_reset_init (UINT32 hw_id, UINT8 nvm_type)
 {
-    ALOGD("%s: brcm_hw_id=0x%x, nvm_type=%d", __FUNCTION__, brcm_hw_id, nvm_type);
+    ALOGD("%s: hw_id=0x%lu, nvm_type=%d", __FUNCTION__, hw_id, nvm_type);
     tHAL_NFC_STATUS stat = HAL_NFC_STATUS_FAILED;
     UINT8 max_credits = 1;
 
     if (nvm_type == NCI_SPD_NVM_TYPE_NONE)
     {
         ALOGD("%s: No NVM detected, FAIL the init stage to force a retry", __FUNCTION__);
-        USERIAL_PowerupDevice (0);
         stat = HAL_NfcReInit (HalNciCallback);
     }
     else
     {
         /* Start downloading the patch files */
-        StartPatchDownload(brcm_hw_id);
+        StartPatchDownload(hw_id);
 
         if (GetNumValue(MAX_RF_DATA_CREDITS, &max_credits, sizeof(max_credits)) && (max_credits > 0))
         {
@@ -480,13 +476,12 @@ void HalNciCallback (tNFC_HAL_NCI_EVT event, UINT16 dataLen, UINT8* data)
             {
                 //controller did not find EEPROM, so re-initialize
                 ALOGD("%s: no nvram, try again", __FUNCTION__);
-                USERIAL_PowerupDevice (0);
                 HAL_NfcReInit (HalNciCallback);
             }
             else
             {
                 UINT8 max_credits = 1;
-                ALOGD("%s: found nvram", __FUNCTION__, nvramType);
+                ALOGD("%s: found nvram %d", __FUNCTION__, nvramType);
                 if (GetNumValue(MAX_RF_DATA_CREDITS, &max_credits, sizeof(max_credits)) && (max_credits > 0))
                 {
                     ALOGD("%s : max_credits=%d", __FUNCTION__, max_credits);
@@ -499,3 +494,251 @@ void HalNciCallback (tNFC_HAL_NCI_EVT event, UINT16 dataLen, UINT8* data)
     ALOGD("%s: exit", __FUNCTION__);
 }
 
+/**************************************************************************************************
+**
+** Function         ReadPatchFile
+**
+** Description      Read function of the available patch and prepatch file
+**
+** Returns          TRUE if operation successful
+**                  FALSE if fails
+**
+****************************************************************************************************/
+int ReadPatchFile(const char* pPatchFilePath,UINT8 **patchdata,UINT32 *patchdatalen)
+{
+    UINT32 patchdatalength  = 0,totalreadbytes=0;
+    FILE *pPatchfile        = NULL;
+    UINT8 ret = FALSE;
+
+    getNfaValues();
+
+    if((pPatchFilePath == NULL))
+    {
+        /* NULL Checks*/
+        ret = FALSE;
+    }
+    else
+    {
+        pPatchfile = fopen(pPatchFilePath,"rb");
+        if(!pPatchfile)
+        {
+            NCI_TRACE_DEBUG0("File Open Failed... No file in the directory");
+            ret = FALSE;
+            goto done;
+        }
+        else
+        {
+            /*read the length of total patch data to allocate the buffer*/
+            if(fseek(pPatchfile, 0, SEEK_END) == 0)
+            {
+                patchdatalength =  ftell(pPatchfile);
+                *patchdatalen = patchdatalength;
+                fseek(pPatchfile, 0, SEEK_SET);
+                *patchdata = (UINT8 *)malloc(patchdatalength);
+                if(!(*patchdata))
+                {
+                    /*Memory allocation failed*/
+                    NCI_TRACE_DEBUG0("Memory allocation failed for patch buffer");
+                    ret = FALSE;
+                    goto done;
+                }
+                /*Read patch data to be sent to the NFCC*/
+                totalreadbytes = fread((*patchdata),sizeof(UINT8),patchdatalength, pPatchfile);
+                if(patchdatalength != totalreadbytes)
+                {
+                    NCI_TRACE_DEBUG0("Patch data read failed");
+                    ret = FALSE;
+                    goto done;
+                }
+                NCI_TRACE_DEBUG0("Patch data read success");
+                ret = TRUE;
+                goto done;
+            }
+            else
+            {
+                /*either file is empty or corrupt*/
+                ret = FALSE;
+            }
+        }
+    }
+done:
+    if(pPatchfile)
+        fclose(pPatchfile);
+
+    return ret;
+}
+
+/**************************************************************************************************
+**
+** Function         nfc_hal_patch_read
+**
+** Description      Read function of the available patch and prepatch file
+**
+** Returns          TRUE if operation successful
+**                  FALSE if fails
+**
+****************************************************************************************************/
+int nfc_hal_patch_read(const char* pPatchFilePath,UINT8 **patchdata,UINT32 *patchdatalength)
+{
+    return ReadPatchFile(pPatchFilePath,patchdata,patchdatalength);
+}
+
+/**************************************************************************************************
+**
+** Function         getlength
+**
+** Description      Convert hex array values stored in buffer in to decimal integer number
+**
+** Returns          Return length in decimal.
+**
+****************************************************************************************************/
+UINT32 getlength(UINT8 * buffer,UINT8 len)
+{
+    UINT32 length = 0;
+    char *end;
+    UINT8 *input = buffer;
+    UINT8 str[12]={0};
+    const char * hex = "0123456789ABCDEF";
+    UINT8 * output = str;
+    int i = 0;
+    NCI_TRACE_DEBUG1("len is %d", len);
+    if((input == NULL) || len < 1 || len > 12)
+    {
+        return 0;
+    }
+    for(;i < len-1; ++i){
+        *output++ = hex[(*input>>4)&0xF];
+        *output++ = hex[(*input++)&0xF];
+    }
+    *output++ = hex[(*input>>4)&0xF];
+    *output++ = hex[(*input)&0xF];
+    *output = 0;
+    length = strtoul((const char*)str,&end, 16);
+    NCI_TRACE_DEBUG1("length is %u", length);
+    return length;
+}
+/***********************************************************************************************************
+**
+** Function         nfc_hal_patch_validate
+**
+** Description      This function will check the PrePatch file and the Patch file
+**                  in 3 important aspects of validity i.e -1)PrePatch ID 2)FW Version
+**                  3)Signature.
+**
+** Returns          TRUE if both files are valid for each other
+**                  FALSE if both file are not valid for each other
+************************************************************************************************************/
+int nfc_hal_patch_validate(UINT8 *patchdata,UINT32 patchdatalen,UINT8 *prepatchdata,UINT32 prepatchdatalen)
+{
+    UINT8 patch_update = FALSE, patchlengthinfo[4] = {0};
+    UINT8 public_key_length[2] = {0}, signature_length_info[2] = {0};
+    UINT32 public_key_length_offset = 0, signature_length_offset = 0;
+    UINT32 patch_length = 0, prepatch_length = 0;
+
+    /* find the length of prepatch data */
+    memcpy(patchlengthinfo,(prepatchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
+    NCI_TRACE_DEBUG4("patchlengthinfo[] : %X %X %X %X",patchlengthinfo[0],patchlengthinfo[1],patchlengthinfo[2],patchlengthinfo[3]);
+
+    prepatch_length = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
+    NCI_TRACE_DEBUG1("patch_length : %d",prepatch_length);
+
+    memset((void*)patchlengthinfo,0,4);
+
+    /* find the length of patch data */
+    memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
+    NCI_TRACE_DEBUG4("patchlengthinfo[] : %X %X %X %X",patchlengthinfo[0],patchlengthinfo[1],patchlengthinfo[2],patchlengthinfo[3]);
+
+    patch_length = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
+    NCI_TRACE_DEBUG1("patch_length : %d",patch_length);
+
+    /* check first if  FW version is same in both files( Patch file and prepatch file)*/
+    if(memcmp((patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS+patch_length-FW_VERSION_OCTETS-PATCH_OCTETS),(prepatchdata + \
+               TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS+prepatch_length-FW_VERSION_OCTETS-PATCH_OCTETS),FW_VERSION_OCTETS) == 0)
+    {
+        NCI_TRACE_DEBUG0("FW version is same in patch file and prepatch file");
+    }
+    else
+   {
+        NCI_TRACE_DEBUG0("FW version is not same in patch file and prepatch file");
+        return FALSE;
+   }
+
+   /* Check if Patch Version is same in both files*/
+    if(memcmp((patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS+patch_length+FW_VERSION_OCTETS-PATCH_OCTETS),(prepatchdata + \
+               TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS+prepatch_length+FW_VERSION_OCTETS-PATCH_OCTETS),PATCH_OCTETS) == 0)
+    {
+        NCI_TRACE_DEBUG0("Patch version is same in patch file and prepatch file");
+    }
+    else
+   {
+        NCI_TRACE_DEBUG0("Patch version is not same in patch file and prepatch file");
+        return FALSE;
+   }
+   return TRUE;
+}
+
+/**********************************************************************************************************
+**
+** Function         nfc_hal_check_firmware_version
+**
+** Description      Checks if the FW version on NFCC and prepatch file is compatible or not.
+**                  This will decide if the prepatch file is relevant for currently running FW or not.
+** Returns          Return length in decimal.
+**
+************************************************************************************************************/
+UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT8 patchdatalen)
+{
+    UINT32 patch_len = 0;
+    UINT8 patchlengthinfo[4] = {0};
+
+    memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
+    patch_len = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
+    if(memcmp((genproprsp+FW_VERSION_OFFSET),(patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+               patch_len-FW_VERSION_OCTETS-PATCH_OCTETS),FW_VERSION_OCTETS) == 0)
+    {
+       return TRUE;
+    }
+    else
+    {
+       return FALSE;
+    }
+}
+/**********************************************************************************************************
+**
+** Function         nfc_hal_check_patch_signature
+**
+** Description      Checks if the patch applied successfully or not.
+**
+** Returns          Return length in decimal.
+**
+************************************************************************************************************/
+UINT8 nfc_hal_check_signature_fw_ver_2(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT32 patchdatalen)
+{
+    UINT32 patch_len = 0,i=0;
+    UINT16 public_key_len = 0;
+    UINT8 patchlengthinfo[4] = {0},public_key_len_info[2]={0};
+
+    NCI_TRACE_DEBUG2("PATCH Update :%X %X",genproprsp[0],genproprsp[1]);
+
+    memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
+    patch_len = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
+
+    memcpy(public_key_len_info,(patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+           patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS),PUBLIC_KEY_LENGTH_OCTETS);
+
+    NCI_TRACE_DEBUG2("PATCH Update :%X %X",public_key_len_info[0],public_key_len_info[1]);
+
+    public_key_len = getlength(public_key_len_info,PUBLIC_KEY_LENGTH_OCTETS);
+
+    /*1 deducted from rsplen to remove length byte*/
+    if(memcmp((genproprsp+(resplen-SIGNATURE_LENGTH)),(patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+               patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS+PUBLIC_KEY_LENGTH_OCTETS+ \
+               public_key_len+SIGNATURE_LENGTH_OCTETS-1),SIGNATURE_LENGTH) != 0)
+    {
+       return PATCH_NOT_UPDATED;
+    }
+    else
+    {
+       return PATCH_UPDATED;
+    }
+}

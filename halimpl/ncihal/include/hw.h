@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -16,26 +20,26 @@
  *
  ******************************************************************************/
 
-#ifndef _BCM2079X_H
-#define _BCM2079X_H
+#ifndef _HW_H
+#define _HW_H
 
-#define BCMNFC_MAGIC	0xFA
+#define NFCC_MAGIC	0xFA
 
 /*
- * BCMNFC power control via ioctl
- * BCMNFC_POWER_CTL(0): power off
- * BCMNFC_POWER_CTL(1): power on
- * BCMNFC_WAKE_CTL(0): wake off
- * BCMNFC_WAKE_CTL(1): wake on
+ * NFCC power control via ioctl
+ * NFCC_POWER_CTL(0): power off
+ * NFCC_POWER_CTL(1): power on
+ * NFCC_WAKE_CTL(0): wake off
+ * NFCC_WAKE_CTL(1): wake on
  */
-#define BCMNFC_POWER_CTL		_IO(BCMNFC_MAGIC, 0x01)
-#define BCMNFC_CHANGE_ADDR		_IO(BCMNFC_MAGIC, 0x02)
-#define BCMNFC_READ_FULL_PACKET		_IO(BCMNFC_MAGIC, 0x03)
-#define BCMNFC_SET_WAKE_ACTIVE_STATE	_IO(BCMNFC_MAGIC, 0x04)
-#define BCMNFC_WAKE_CTL			_IO(BCMNFC_MAGIC, 0x05)
-#define BCMNFC_READ_MULTI_PACKETS	_IO(BCMNFC_MAGIC, 0x06)
+#define NFCC_POWER_CTL				_IO(NFCC_MAGIC, 0x01)
+#define NFCC_CHANGE_ADDR			_IO(NFCC_MAGIC, 0x02)
+#define NFCC_READ_FULL_PACKET		_IO(NFCC_MAGIC, 0x03)
+#define NFCC_SET_WAKE_ACTIVE_STATE	_IO(NFCC_MAGIC, 0x04)
+#define NFCC_WAKE_CTL				_IO(NFCC_MAGIC, 0x05)
+#define NFCC_READ_MULTI_PACKETS		_IO(NFCC_MAGIC, 0x06)
 
-struct bcm2079x_platform_data {
+struct nfcc_platform_data {
 	unsigned int irq_gpio;
 	unsigned int en_gpio;
 	int wake_gpio;

@@ -16,8 +16,8 @@
 # function to find all *.cpp files under a directory
 define all-cpp-files-under
 $(patsubst ./%,%, \
-  $(shell cd $(LOCAL_PATH) ; \
-          find $(1) -name "*.cpp" -and -not -name ".*") \
+$(shell cd $(LOCAL_PATH) ; \
+  find $(1) -name "*.cpp" -and -not -name ".*") \
  )
 endef
 
@@ -45,10 +45,12 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_C_INCLUDES += external/stlport/stlport  bionic/  bionic/libstdc++/include \
 	$(LOCAL_PATH)/include \
 	$(LOCAL_PATH)/gki/ulinux \
- 	$(LOCAL_PATH)/gki/common \
+	$(LOCAL_PATH)/gki/common \
 	$(LOCAL_PATH)/udrv/include \
 	$(LOCAL_PATH)/hal/include \
-	$(LOCAL_PATH)/hal/int
+	$(LOCAL_PATH)/hal/int    \
+	$(LOCAL_PATH)/DT_Include \
+	$(LOCAL_PATH)/adaptation
 
 LOCAL_CFLAGS += -DANDROID \
 	-DBUILDCFG=1 -DNFC_HAL_TARGET=TRUE -DNFC_RW_ONLY=TRUE

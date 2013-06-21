@@ -1,4 +1,9 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -15,7 +20,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
 #include "OverrideLog.h"
 #include <string.h>
 #include "gki.h"
@@ -32,24 +36,32 @@
 #include <gki_int.h>
 #include "hcidefs.h"
 #include <poll.h>
-#include "upio.h"
-#include "bcm2079x.h"
+#include "hw.h"
 #include "config.h"
+
+#include <DT_Nfc_link.h>
+#include <DT_Nfc_types.h>
+#include <DT_Nfc_status.h>
+#include <DT_Nfc_i2c.h>
+#include <DT_Nfc_log.h>
+#include <DT_Nfc.h>
+#include <semaphore.h>
 
 #define HCISU_EVT                           EVENT_MASK(APPL_EVT_0)
 #define MAX_ERROR                           10
-#define default_transport                   "/dev/bcm2079x"
+#define default_transport                   "/dev/nfc-nci"
 
 #define NUM_RESET_ATTEMPTS                  5
 
 #ifndef BTE_APPL_MAX_USERIAL_DEV_NAME
-#define BTE_APPL_MAX_USERIAL_DEV_NAME           (256)
+#define BTE_APPL_MAX_USERIAL_DEV_NAME       (256)
 #endif
 extern UINT8 appl_trace_level;
 
 /* Mapping of USERIAL_PORT_x to linux */
 extern UINT32 ScrProtocolTraceFlag;
-static tUPIO_STATE current_nfc_wake_state = UPIO_OFF;
+static int current_nfc_wake_state = 0;
+
 int uart_port  = 0;
 int isLowSpeedTransport = 0;
 int nfc_wake_delay = 0;
@@ -69,14 +81,11 @@ tSNOOZE_MODE_CONFIG gSnoozeModeCfg = {
     NFC_HAL_LP_ACTIVE_HIGH              /* Host Wake active mode (0=ActiveLow 1=ActiveHigh) */
 };
 
-UINT8 bcmi2cnfc_client_addr = 0;
-UINT8 bcmi2cnfc_read_multi_packets = 0;
-
 #define USERIAL_Debug_verbose     ((ScrProtocolTraceFlag & 0x80000000) == 0x80000000)
 
 #include <sys/socket.h>
 
-#define LOG_TAG "USERIAL_LINUX"
+#define LOG_TAG "NfcDt"
 
 static UINT8 spi_negotiation[10] = { 0xF0, /* CMD */
                                     0x00, /* SPI PARM Negotiation */
@@ -92,8 +101,6 @@ static UINT8 spi_negotiation[10] = { 0xF0, /* CMD */
 static UINT8 spi_nego_res[20];
 
 #include <ctype.h>
-
-#define USING_BRCM_USB TRUE
 
 /* use tc interface to change baudrate instead of close/open sequence which can fail on some platforms
  * due to tx line movement when opeing/closing the UART. the 43xx do not like this. */
@@ -122,17 +129,19 @@ static UINT8 spi_nego_res[20];
  * It would be better to use some ring buffer from the USERIAL_Read() is reading
  * instead of putting it into GKI buffers.
  */
-#define READ_LIMIT (USERIAL_POOL_BUF_SIZE-BT_HDR_SIZE)
+#define READ_LIMIT                  (USERIAL_POOL_BUF_SIZE-BT_HDR_SIZE)
 /*
  * minimum buffer size requirement to read a full sized packet from NFCC = 255 + 4 byte header
  */
-#define MIN_BUFSIZE 259
-#define     POLL_TIMEOUT    1000
+#define MIN_BUFSIZE                 259
+#define POLL_TIMEOUT                1000
 /* priority of the reader thread */
-#define USERIAL_READ_TRHEAD_PRIO 90
+#define USERIAL_READ_TRHEAD_PRIO    90
 /* time (ms) to wait before trying to allocate again a GKI buffer */
-#define NO_GKI_BUFFER_RECOVER_TIME 100
-#define MAX_SERIAL_PORT (USERIAL_PORT_15 + 1)
+#define NO_GKI_BUFFER_RECOVER_TIME  100
+#define MAX_SERIAL_PORT             (USERIAL_PORT_15 + 1)
+#define DT_POOL_ID                  1
+
 
 extern void dumpbin(const char* data, int size);
 extern UINT8 *scru_dump_hex (UINT8 *p, char *p_title, UINT32 len, UINT32 trace_layer, UINT32 trace_type);
@@ -156,9 +165,11 @@ typedef struct  {
 
 static tLINUX_CB linux_cb;  /* case of multipel port support use array : [MAX_SERIAL_PORT] */
 
-void userial_close_thread(UINT32 params);
 
-static UINT8 device_name[20];
+
+void DT_Nfc_close_thread(UINT32 params);
+
+static UINT8 device_name[30];
 static int   bSerialPortDevice = FALSE;
 static int _timeout = POLL_TIMEOUT;
 static BOOLEAN is_close_thread_is_waiting = FALSE;
@@ -172,6 +183,64 @@ typedef struct {
     long    count;
     long    overhead;
 } tPERF_DATA;
+
+
+/** Set Logging Threshold Level **/
+#define NFC_MSG_THRESH          NFC_ALL_LOGGING
+
+#define NFC_HANDLER_TEST
+
+#undef TEST_FILE_LINK
+#undef MSVC_REX_DEBUG
+
+#define NFC_PAGE_SIZE           (0x1000)    //4K Pages
+#define PAGES                   (0x8)       //8 Pages for now, giving 32 KBytes
+#define BLOCK_START             (0x0)
+#define BYTE_SHIFT              (8)
+#define NFC_HEADER              (3)
+
+/* 288 byte limit - could read this from block itself */
+#define BLOCK_SIZE              (0x120)
+/* Calculate the number of available blocks - could read this from block itself */
+#define BLOCK_LIMIT             (unsigned short)( ((NFC_PAGE_SIZE)*(PAGES))/(BLOCK_SIZE) )
+
+
+
+#define USING_POLL_WAIT    /* If we use polled wait rather than SIGIO approach */
+
+/*structure holds members related for both read and write operations*/
+typedef struct DT_RdWr_st
+{
+    char                ReaderThreadAlive;
+
+    long                nReadMode;              /* Is this a solicited/unsolicited READ */
+    char                *block_zero_base;       /* This is mapped to page aligned buffer written
+                                                    to by kernel driver. Base Address */
+    char                *block_absolute;        /* Base Address(above) + Current Block No. + Offset */
+    signed short        block_no_handler;       /* The Current Block No. we're reading from in
+                                                      shared mem - in handler context */
+    signed short        block_no_deferred;      /* Block no. being read from client context - it may lag
+                                                       but unlikely since data rate veerry slow */
+    signed short        block_lag;              /* Latency in client servicing */
+    unsigned short      block_wrap_handler_cnt; /* The block buffer is cyclic so need to know when the
+                                                       the block_no_handler wraps back to zero. This should
+                                                       NEVER be allowed to  == 2, otherwise we have a lag
+                                                       at least equal to the total number of block so we
+                                                       are over writing data. */
+    BOOLEAN             blocks_available;       /* If we have new block(s) to service. */
+    UINT8               uiPoolID;               /* Memory pool ID generated when pool created */
+    char                WaitOnWrite;
+    char                WriteBusy;
+} DT_Nfc_RdWr_t;
+
+
+
+static DT_Nfc_RdWr_t            RdWrContext;
+static DT_Nfc_Phy_select_t      dTransport;
+static DT_Nfc_sConfig_t         DriverConfig;
+void                            *pdTransportHandle;
+
+static sem_t                    data_available;
 
 /*******************************************************************************
 **
@@ -200,9 +269,7 @@ void perf_reset(tPERF_DATA* t)
 *******************************************************************************/
 void perf_log(tPERF_DATA* t)
 {
-    // round to nearest ms
-    // t->lapse += 500;
-    // t->lapse /= 1000;
+
     if (t->lapse)
     {
         if (t->bytes)
@@ -281,7 +348,7 @@ static UINT32 userial_baud_tbl[] =
 *******************************************************************************/
 static inline int wake_state()
 {
-    return ((gSnoozeModeCfg.nfc_wake_active_mode == NFC_HAL_LP_ACTIVE_HIGH) ? UPIO_ON : UPIO_OFF);
+    return 0;
 }
 
 /*******************************************************************************
@@ -295,7 +362,7 @@ static inline int wake_state()
 *******************************************************************************/
 static inline int sleep_state()
 {
-    return ((gSnoozeModeCfg.nfc_wake_active_mode == NFC_HAL_LP_ACTIVE_HIGH) ? UPIO_OFF : UPIO_ON);
+    return 0;
 }
 
 /*******************************************************************************
@@ -309,7 +376,7 @@ static inline int sleep_state()
 *******************************************************************************/
 static inline int isWake(int state)
 {
-    int     asserted_state = ((gSnoozeModeCfg.nfc_wake_active_mode == NFC_HAL_LP_ACTIVE_HIGH) ? UPIO_ON : UPIO_OFF);
+    int     asserted_state = 0;
     return (state != -1) ?
         state == asserted_state :
         current_nfc_wake_state == asserted_state;
@@ -689,9 +756,10 @@ done:
 extern BOOLEAN gki_chk_buf_damage(void *p_buf);
 static int sRxLength = 0;
 
+
 /*******************************************************************************
  **
- ** Function           userial_read_thread
+ ** Function           DT_read_thread
  **
  ** Description        entry point of read thread.
  **
@@ -700,7 +768,7 @@ static int sRxLength = 0;
  ** Returns            0
  **
  *******************************************************************************/
-UINT32 userial_read_thread(UINT32 arg)
+UINT32 DT_read_thread(UINT32 arg)
 {
     int rx_length;
     int error_count = 0;
@@ -710,7 +778,7 @@ UINT32 userial_read_thread(UINT32 arg)
 
     worker_thread1 = pthread_self();
 
-    ALOGD( "start userial_read_thread, id=%lx", worker_thread1);
+    ALOGD( "start DT_read_thread, id=%lx", worker_thread1);
     _timeout = POLL_TIMEOUT;
 
     for (;linux_cb.sock > 0;)
@@ -718,7 +786,7 @@ UINT32 userial_read_thread(UINT32 arg)
         BT_HDR *p_buf;
         UINT8 *current_packet;
 
-        if ((p_buf = (BT_HDR *) GKI_getpoolbuf( USERIAL_POOL_ID ) )!= NULL)
+        if ((p_buf = (BT_HDR *) GKI_getpoolbuf( DT_POOL_ID ) )!= NULL)
         {
             p_buf->offset = 0;
             p_buf->layer_specific = 0;
@@ -729,7 +797,7 @@ UINT32 userial_read_thread(UINT32 arg)
         }
         else
         {
-            ALOGE( "userial_read_thread(): unable to get buffer from GKI p_buf = %p poolid = %d\n", p_buf, USERIAL_POOL_ID);
+            ALOGE( "DT_read_thread(): unable to get buffer from GKI p_buf = %p poolid = %d\n", p_buf, DT_POOL_ID);
             rx_length = 0;  /* paranoia setting */
             GKI_delay( NO_GKI_BUFFER_RECOVER_TIME );
             continue;
@@ -744,13 +812,10 @@ UINT32 userial_read_thread(UINT32 arg)
             p_buf->len = (UINT16)rx_length;
             GKI_enqueue(&Userial_in_q, p_buf);
             if (!isLowSpeedTransport)
-                ALOGD_IF((appl_trace_level>=BT_TRACE_LEVEL_DEBUG), "userial_read_thread(): enqueued p_buf=%p, count=%d, length=%d\n",
+                ALOGD_IF((appl_trace_level>=BT_TRACE_LEVEL_DEBUG), "DT_read_thread(): enqueued p_buf=%p, count=%d, length=%d\n",
                             p_buf, Userial_in_q.count, rx_length);
 
-            if (linux_cb.ser_cb != NULL)
-                (*linux_cb.ser_cb)(linux_cb.port, USERIAL_RX_READY_EVT, (tUSERIAL_EVT_DATA *)p_buf);
-
-            GKI_send_event(USERIAL_HAL_TASK, HCISU_EVT);
+            GKI_send_event (NFC_HAL_TASK, NFC_HAL_TASK_EVT_DATA_RDY);
         }
         else
         {
@@ -759,7 +824,7 @@ UINT32 userial_read_thread(UINT32 arg)
                 continue;
             else if (rx_length == -1)
             {
-                ALOGD( "userial_read_thread(): exiting\n");
+                ALOGD( "DT_read_thread(): exiting\n");
                 break;
             }
             else if (rx_length == 0 && !isWake(-1))
@@ -769,7 +834,7 @@ UINT32 userial_read_thread(UINT32 arg)
             {
                 if (bErrorReported == 0)
                 {
-                    ALOGE( "userial_read_thread(): my_read returned (%d) error count = %d, errno=%d return USERIAL_ERR_EVT\n",
+                    ALOGE( "DT_read_thread(): my_read returned (%d) error count = %d, errno=%d return USERIAL_ERR_EVT\n",
                             rx_length, error_count, errno);
                     if (linux_cb.ser_cb != NULL)
                         (*linux_cb.ser_cb)(linux_cb.port, USERIAL_ERR_EVT, (tUSERIAL_EVT_DATA *)p_buf);
@@ -779,7 +844,7 @@ UINT32 userial_read_thread(UINT32 arg)
                 }
                 if (sRxLength == 0)
                 {
-                    ALOGE( "userial_read_thread(): my_read returned (%d) error count = %d, errno=%d exit read thread\n",
+                    ALOGE( "DT_read_thread(): my_read returned (%d) error count = %d, errno=%d exit read thread\n",
                             rx_length, error_count, errno);
                     break;
                 }
@@ -787,18 +852,27 @@ UINT32 userial_read_thread(UINT32 arg)
         }
     } /* for */
 
-    ALOGD( "userial_read_thread(): freeing GKI_buffers\n");
+    ALOGD( "DT_read_thread(): freeing GKI_buffers\n");
     while ((p_buf = (BT_HDR *) GKI_dequeue (&Userial_in_q)) != NULL)
     {
         GKI_freebuf(p_buf);
-        ALOGD("userial_read_thread: dequeued buffer from Userial_in_q\n");
+        ALOGD("DT_read_thread: dequeued buffer from Userial_in_q\n");
     }
 
     GKI_exit_task (GKI_get_taskid ());
-    ALOGD( "USERIAL READ: EXITING TASK\n");
+    ALOGD( "DT READ: EXITING TASK\n");
 
     return 0;
 }
+
+UINT16 DT_unprocessed_data()
+{
+    UINT16 len=0;
+    len = GKI_queue_length (&Userial_in_q);
+    ALOGD( "DT_unprocessed_data: %d\n",len);
+    return len;
+}
+
 
 /*******************************************************************************
  **
@@ -876,169 +950,179 @@ void userial_io_init_bt_wake( int fd, unsigned long * p_wake_state )
 
 /*******************************************************************************
 **
-** Function           USERIAL_Open
+** Function           DT_Nfc_Open
 **
-** Description        Open the indicated serial port with the given configuration
+** Description        Configure the physical interface to controller.
 **
 ** Output Parameter   None
 **
 ** Returns            Nothing
 **
 *******************************************************************************/
-UDRV_API void USERIAL_Open(tUSERIAL_PORT port, tUSERIAL_OPEN_CFG *p_cfg, tUSERIAL_CBACK *p_cback)
+NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportHandle, void (*nci_cb) )
 {
-    UINT32 baud = 0;
-    UINT8 data_bits = 0;
-    UINT16 parity = 0;
-    UINT8 stop_bits = 0;
-    struct termios termios;
-    const char ttyusb[] = "/dev/ttyUSB";
-    const char devtty[] = "/dev/tty";
-    unsigned long num = 0;
-    int     ret = 0;
+   NFC_RETURN_CODE retstatus = NFC_SUCCESS;
+   UINT16 Cfg;
 
-    ALOGI("USERIAL_Open(): enter");
+   /* if userial_close_thread() is waiting to run; let it go first;
+      let it finish; then continue this function */
 
-    //if userial_close_thread() is waiting to run; let it go first;
-    //let it finish; then continue this function
-    while (TRUE)
-    {
-        pthread_mutex_lock(&close_thread_mutex);
-        if (is_close_thread_is_waiting)
-        {
-            pthread_mutex_unlock(&close_thread_mutex);
-            ALOGI("USERIAL_Open(): wait for close-thread");
-            sleep (1);
+   while (TRUE){
+       pthread_mutex_lock(&close_thread_mutex);
+       if (is_close_thread_is_waiting){
+           pthread_mutex_unlock(&close_thread_mutex);
+           ALOGI("DT_Nfc_Open(): wait for close-thread");
+           sleep (1);
         }
         else
             break;
-    }
+   }
 
-    // restore default power off delay settings incase they were changed in userial_set_poweroff_delays()
-    gPrePowerOffDelay = 0;
-    gPostPowerOffDelay = 0;
+#ifdef PREV_LOGGING_MECH
+   NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open\n");
+#else
+   NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open");
+#endif
+   if (pDriverConfig->devFile == NULL) {
+#ifdef PREV_LOGGING_MECH
+       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_ERROR, "DT:DT_Nfc_Open : devFile NULL\n");
+#else
+       NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : devFile NULL");
+#endif
+       return NFC_FAILED;
+   }
 
-    if ( !GetStrValue ( NAME_TRANSPORT_DRIVER, userial_dev, sizeof ( userial_dev ) ) )
-        strcpy ( userial_dev, default_transport );
-    if ( GetNumValue ( NAME_UART_PORT, &num, sizeof ( num ) ) )
-        uart_port = num;
-    if ( GetNumValue ( NAME_LOW_SPEED_TRANSPORT, &num, sizeof ( num ) ) )
-        isLowSpeedTransport = num;
-    if ( GetNumValue ( NAME_NFC_WAKE_DELAY, &num, sizeof ( num ) ) )
-        nfc_wake_delay = num;
-    if ( GetNumValue ( NAME_NFC_WRITE_DELAY, &num, sizeof ( num ) ) )
-        nfc_write_delay = num;
-    if ( GetNumValue ( NAME_PERF_MEASURE_FREQ, &num, sizeof ( num ) ) )
-        perf_log_every_count = num;
-    if ( GetNumValue ( NAME_POWER_ON_DELAY, &num, sizeof ( num ) ) )
-        gPowerOnDelay = num;
-    if ( GetNumValue ( NAME_PRE_POWER_OFF_DELAY, &num, sizeof ( num ) ) )
-        gPrePowerOffDelay = num;
-    if ( GetNumValue ( NAME_POST_POWER_OFF_DELAY, &num, sizeof ( num ) ) )
-        gPostPowerOffDelay = num;
-    ALOGI("USERIAL_Open() device: %s port=%d, uart_port=%d WAKE_DELAY(%d) WRITE_DELAY(%d) POWER_ON_DELAY(%d) PRE_POWER_OFF_DELAY(%d) POST_POWER_OFF_DELAY(%d)",
-            (char*)userial_dev, port, uart_port, nfc_wake_delay, nfc_write_delay, gPowerOnDelay, gPrePowerOffDelay,
-            gPostPowerOffDelay);
-    GetStrValue( NAME_SNOOZE_MODE_CFG, (char*)&gSnoozeModeCfg, sizeof(gSnoozeModeCfg) );
+   if ((pDriverConfig == NULL) || (pdTransportHandle == NULL))
+   {
+#ifdef PREV_LOGGING_MECH
+       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_ERROR, "DT:DT_Nfc_Open : phwref == NULL\n");
+#else
+       NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : phwref == NULL");
+#endif
+       return NFC_INVALID;
+   }
 
-    strcpy((char*)device_name, (char*)userial_dev);
-    sRxLength = 0;
-    _poll_t0 = 0;
+   memset(&dTransport, 0, sizeof(DT_Nfc_Phy_select_t));
+   memcpy(&DriverConfig, pDriverConfig, sizeof(DT_Nfc_sConfig_t));
 
-    if ((strncmp(userial_dev, ttyusb, sizeof(ttyusb)-1) == 0) ||
-        (strncmp(userial_dev, devtty, sizeof(devtty)-1) == 0) )
-    {
-        if (uart_port >= MAX_SERIAL_PORT)
-        {
-            ALOGD( "Port > MAX_SERIAL_PORT\n");
-            goto done_open;
-        }
-        bSerialPortDevice = TRUE;
-        sprintf((char*)device_name, "%s%d", (char*)userial_dev, uart_port);
-        ALOGI("USERIAL_Open() using device_name: %s ", (char*)device_name);
-        if (!userial_to_tcio_baud(p_cfg->baud, &baud))
-            goto done_open;
+   switch(pDriverConfig->phyType)
+   {
+      case ENUM_LINK_TYPE_UART:
+      case ENUM_LINK_TYPE_USB:
+      {
+#ifdef  PREV_LOGGING_MECH
+         NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : UART link Config\n");
+#else
+         NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : UART link Config");
+#endif
+      }
+      break;
 
-        if (p_cfg->fmt & USERIAL_DATABITS_8)
-            data_bits = CS8;
-        else if (p_cfg->fmt & USERIAL_DATABITS_7)
-            data_bits = CS7;
-        else if (p_cfg->fmt & USERIAL_DATABITS_6)
-            data_bits = CS6;
-        else if (p_cfg->fmt & USERIAL_DATABITS_5)
-            data_bits = CS5;
-        else
-            goto done_open;
+      case ENUM_LINK_TYPE_I2C:
+      {
+#ifdef  PREV_LOGGING_MECH
+         NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : I2C link Config\n");
+#else
+         NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : I2C link Config");
+#endif
+         dTransport.init        = DT_Nfc_i2c_initialize;
+         dTransport.close       = DT_Nfc_i2c_close;
+         dTransport.setup       = DT_Nfc_i2c_setup;
+         dTransport.rst         = DT_Nfc_i2c_reset;
+         break;
+      }
+      default:
+      {
+      }
+   }
+   dTransport.init();
+   retstatus = dTransport.setup(pDriverConfig, pdTransportHandle);
 
-        if (p_cfg->fmt & USERIAL_PARITY_NONE)
-            parity = 0;
-        else if (p_cfg->fmt & USERIAL_PARITY_EVEN)
-            parity = PARENB;
-        else if (p_cfg->fmt & USERIAL_PARITY_ODD)
-            parity = (PARENB | PARODD);
-        else
-            goto done_open;
+   if (retstatus != NFC_SUCCESS)
+   {
+#ifdef  PREV_LOGGING_MECH
+         NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : can't open DT ...\n");
+#else
+         NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : can't open DT ..");
+#endif
+       retstatus = NFC_FAILED;
+       return retstatus;
+   }
 
-        if (p_cfg->fmt & USERIAL_STOPBITS_1)
-            stop_bits = 0;
-        else if (p_cfg->fmt & USERIAL_STOPBITS_2)
-            stop_bits = CSTOPB;
-        else
-            goto done_open;
-    }
-    else
-        strcpy((char*)device_name, (char*)userial_dev);
+   if ((int) (*pdTransportHandle) == 0){
+#ifdef  PREV_LOGGING_MECH
+       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : Open but assigned 0 close it down !!! ...\n");
+       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : Try to reassign ...\n");
+#else
+         NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : Open but assigned 0 close it down !!! ...");
+         NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : Try to reassign ...");
+#endif
+         retstatus = dTransport.setup(pDriverConfig, pdTransportHandle);
+#ifdef  PREV_LOGGING_MECH
+         NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open (second):  New Handle = %d ...\n",(int) (*pdTransportHandle) );
+#else
+         NCI_TRACE_DEBUG1("DT:DT_Nfc_Open (second):  New Handle = %d ...\n",(int) (*pdTransportHandle) );
+#endif
+   }
 
-    {
-        ALOGD("%s Opening %s\n",  __FUNCTION__, device_name);
-        if ((linux_cb.sock = open((char*)device_name, O_RDWR | O_NOCTTY )) == -1)
-        {
-            ALOGI("%s unable to open %s",  __FUNCTION__, device_name);
-            GKI_send_event(NFC_HAL_TASK, NFC_HAL_TASK_EVT_TERMINATE);
-            goto done_open;
-        }
-        ALOGD( "sock = %d\n", linux_cb.sock);
-        if (GetStrValue ( NAME_POWER_CONTROL_DRIVER, power_control_dev, sizeof ( power_control_dev ) ) &&
-            power_control_dev[0] != '\0')
-        {
-            if (strcmp(power_control_dev, userial_dev) == 0)
-                linux_cb.sock_power_control = linux_cb.sock;
-            else
-            {
-                if ((linux_cb.sock_power_control = open((char*)power_control_dev, O_RDWR | O_NOCTTY )) == -1)
-                {
-                    ALOGI("%s unable to open %s",  __FUNCTION__, power_control_dev);
-                }
-            }
-        }
+   if (retstatus != NFC_SUCCESS)
+   {
+#ifdef PREV_LOGGING_MECH
+        NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open (second): can't open DT ...\n");
+#else
+        NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open (second): can't open DT ...");
+#endif
+       retstatus = NFC_FAILED;
+       return retstatus;
+   }
 
-        USERIAL_PowerupDevice(port);
-    }
+   /* Store context here now */
+   linux_cb.sock = (int) (*pdTransportHandle);      /* cast back to integer */
+   linux_cb.ser_cb     = nci_cb;                    /* was p_cback; */
 
-    linux_cb.ser_cb     = p_cback;
-    linux_cb.port = port;
-    memcpy(&linux_cb.open_cfg, p_cfg, sizeof(tUSERIAL_OPEN_CFG));
-    GKI_create_task ((TASKPTR)userial_read_thread, USERIAL_HAL_TASK, (INT8*)"USERIAL_HAL_TASK", 0, 0, (pthread_cond_t*)NULL, NULL);
+   RdWrContext.uiPoolID = DT_POOL_ID;
+
+   /* Initialise semaphore */
+   if(sem_init(&data_available, 0, 0) == -1){
+#ifdef PREV_LOGGING_MECH
+       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_ERROR, "DT:DT_Nfc_Open : NFC Init Semaphore creation Error\n");
+#else
+        NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : NFC Init Semaphore creation Error");
+#endif
+        return -1;
+   }
+
+   /* Create reader thread */
+   GKI_create_task ((TASKPTR)DT_read_thread, USERIAL_HAL_TASK, (INT8*)"USERIAL_HAL_TASK", 0, 0, (pthread_cond_t*)NULL, NULL);
+
+   /* Initialise the DT context */
+   /* Reset the Reader Thread values to NULL */
+   memset((void *)&RdWrContext,0,sizeof(RdWrContext));
+   RdWrContext.ReaderThreadAlive    = TRUE;
+   RdWrContext.WriteBusy            = FALSE;
+   RdWrContext.WaitOnWrite          = FALSE;
+
+   /* Configure Read Mode for NFCC - set to unsolicited */
+   RdWrContext.nReadMode = UNSOLICITED;
 
 
-#if (defined USERIAL_DEBUG) && (USERIAL_DEBUG == TRUE)
-    ALOGD( "Leaving USERIAL_Open\n");
+   /* Shared Mem Access */
+   if (RdWrContext.block_zero_base == NULL){
+       RdWrContext.block_zero_base = mmap(NULL, (NFC_PAGE_SIZE * PAGES), 0x1|0x2, 0 | 0x01, linux_cb.sock, 0);
+   }
+
+   /* Now enable handler Interrupts - For Reads */
+#ifndef USING_POLL_WAIT
+   reg_int_handler(linux_cb.sock);
 #endif
 
-#if (SERIAL_AMBA == TRUE)
-    /* give 20ms time for reader thread */
-    GKI_delay(20);
-#endif
+   pthread_mutex_unlock(&close_thread_mutex);
 
-done_open:
-    pthread_mutex_unlock(&close_thread_mutex);
-    ALOGI("USERIAL_Open(): exit");
-    return;
+   return retstatus;
 }
-
 /*******************************************************************************
 **
-** Function           USERIAL_Read
+** Function           DT_Nfc_Read
 **
 ** Description        Read data from a serial port using byte buffers.
 **
@@ -1049,53 +1133,44 @@ done_open:
 **
 *******************************************************************************/
 
-static BT_HDR *pbuf_USERIAL_Read = NULL;
+static BT_HDR *pbuf_dt_Read = NULL;
 
-UDRV_API UINT16  USERIAL_Read(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
+UDRV_API UINT16  DT_Nfc_Read(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
 {
     UINT16 total_len = 0;
     UINT16 copy_len = 0;
     UINT8 * current_packet = NULL;
 
-#if (defined USERIAL_DEBUG) && (USERIAL_DEBUG == TRUE)
-    ALOGD( "%s ++ len=%d pbuf_USERIAL_Read=%p, p_data=%p\n", __func__, len, pbuf_USERIAL_Read, p_data);
-#endif
-    do
+    ALOGD( "%s ++ len=%d pbuf_dt_Read=%p, p_data=%p\n", __func__, len, pbuf_dt_Read, p_data);
+    if (pbuf_dt_Read == NULL && (total_len < len))
+        pbuf_dt_Read = (BT_HDR *)GKI_dequeue(&Userial_in_q);
+
+    if (pbuf_dt_Read != NULL)
     {
-        if (pbuf_USERIAL_Read != NULL)
+        current_packet = ((UINT8 *)(pbuf_dt_Read + 1)) + (pbuf_dt_Read->offset);
+
+        if ((pbuf_dt_Read->len) <= (len - total_len))
+            copy_len = pbuf_dt_Read->len;
+        else
+            copy_len = (len - total_len);
+
+        memcpy((p_data + total_len), current_packet, copy_len);
+
+        total_len += copy_len;
+
+        pbuf_dt_Read->offset += copy_len;
+        pbuf_dt_Read->len -= copy_len;
+
+        if (pbuf_dt_Read->len == 0)
         {
-            current_packet = ((UINT8 *)(pbuf_USERIAL_Read + 1)) + (pbuf_USERIAL_Read->offset);
-
-            if ((pbuf_USERIAL_Read->len) <= (len - total_len))
-                copy_len = pbuf_USERIAL_Read->len;
-            else
-                copy_len = (len - total_len);
-
-            memcpy((p_data + total_len), current_packet, copy_len);
-
-            total_len += copy_len;
-
-            pbuf_USERIAL_Read->offset += copy_len;
-            pbuf_USERIAL_Read->len -= copy_len;
-
-            if (pbuf_USERIAL_Read->len == 0)
-            {
-                GKI_freebuf(pbuf_USERIAL_Read);
-                pbuf_USERIAL_Read = NULL;
-            }
+            GKI_freebuf(pbuf_dt_Read);
+            pbuf_dt_Read = NULL;
         }
+    }
 
-        if (pbuf_USERIAL_Read == NULL && (total_len < len))
-            pbuf_USERIAL_Read = (BT_HDR *)GKI_dequeue(&Userial_in_q);
-
-    } while ((pbuf_USERIAL_Read != NULL) && (total_len < len));
-
-#if (defined USERIAL_DEBUG) && (USERIAL_DEBUG == TRUE)
     ALOGD( "%s: returned %d bytes", __func__, total_len);
-#endif
     return total_len;
 }
-
 /*******************************************************************************
 **
 ** Function           USERIAL_Readbuf
@@ -1112,12 +1187,10 @@ UDRV_API UINT16  USERIAL_Read(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
 **                    NULL.
 **
 *******************************************************************************/
-
 UDRV_API void    USERIAL_ReadBuf(tUSERIAL_PORT port, BT_HDR **p_buf)
 {
 
 }
-
 /*******************************************************************************
 **
 ** Function           USERIAL_WriteBuf
@@ -1134,15 +1207,13 @@ UDRV_API void    USERIAL_ReadBuf(tUSERIAL_PORT port, BT_HDR **p_buf)
 **                    buffer.
 **
 *******************************************************************************/
-
 UDRV_API BOOLEAN USERIAL_WriteBuf(tUSERIAL_PORT port, BT_HDR *p_buf)
 {
     return FALSE;
 }
-
 /*******************************************************************************
 **
-** Function           USERIAL_Write
+** Function           DT_Nfc_Write
 **
 ** Description        Write data to a serial port using a byte buffer.
 **
@@ -1152,14 +1223,15 @@ UDRV_API BOOLEAN USERIAL_WriteBuf(tUSERIAL_PORT port, BT_HDR *p_buf)
 **                    may be less than len.
 **
 *******************************************************************************/
-UDRV_API UINT16  USERIAL_Write(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
+UDRV_API UINT16  DT_Nfc_Write(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
 {
     int ret = 0, total = 0;
     int i = 0;
     clock_t t;
 
     doWriteDelay();
-    ALOGD_IF((appl_trace_level>=BT_TRACE_LEVEL_DEBUG), "USERIAL_Write: (%d bytes) - \n", len);
+    ALOGD_IF((appl_trace_level>=BT_TRACE_LEVEL_DEBUG), "DT_Nfc_Write: (%d bytes) - \n", len);
+    ALOGD( "%s ++ len=%d DT_Nfc_Write= p_data=%p\n", __func__, len, p_data);
     t = clock();
     while (len != 0)
     {
@@ -1171,159 +1243,50 @@ UDRV_API UINT16  USERIAL_Write(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
     }
     perf_update(&perf_write, clock() - t, total);
 
-    ALOGD_IF((appl_trace_level>=BT_TRACE_LEVEL_DEBUG), "USERIAL_Write len = %d, ret =  %d, errno = %d\n", len, ret, errno);
+    ALOGD_IF((appl_trace_level>=BT_TRACE_LEVEL_DEBUG), "DT_Nfc_Write len = %d, ret =  %d, errno = %d\n", len, ret, errno);
 
     /* register a delay for next write
      */
     setWriteDelay(total * nfc_write_delay / 1000);
     return ((UINT16)total);
 }
-
 /*******************************************************************************
 **
-** Function           userial_change_rate
-**
-** Description        change naud rate
-**
-** Output Parameter   None
-**
-** Returns            None
-**
-*******************************************************************************/
-void userial_change_rate(UINT8 baud)
-{
-#if defined (USING_BRCM_USB) && (USING_BRCM_USB == FALSE)
-    struct termios termios;
-#endif
-#if (USERIAL_USE_TCIO_BAUD_CHANGE==TRUE)
-    UINT32 tcio_baud;
-#endif
-
-#if defined (USING_BRCM_USB) && (USING_BRCM_USB == FALSE)
-    tcflush(linux_cb.sock, TCIOFLUSH);
-
-    tcgetattr(linux_cb.sock, &termios);
-
-    cfmakeraw(&termios);
-    cfsetospeed(&termios, baud);
-    cfsetispeed(&termios, baud);
-
-    termios.c_cflag |= (CLOCAL | CREAD | CRTSCTS | stop_bits);
-
-    tcsetattr(linux_cb.sock, TCSANOW, &termios);
-    tcflush(linux_cb.sock, TCIOFLUSH);
-
-#else
-#if (USERIAL_USE_TCIO_BAUD_CHANGE==FALSE)
-    fprintf(stderr, "userial_change_rate: Closing UART Port\n");
-    ALOGI("userial_change_rate: Closing UART Port\n");
-    USERIAL_Close(linux_cb.port);
-
-    GKI_delay(50);
-
-    /* change baud rate in settings - leave everything else the same  */
-    linux_cb.open_cfg.baud = baud;
-
-    ALOGD( "userial_change_rate: Attempting to reopen the UART Port at 0x%08x\n", (unsigned int)USERIAL_GetLineSpeed(baud));
-    ALOGI("userial_change_rate: Attempting to reopen the UART Port at %i\n", (unsigned int)USERIAL_GetLineSpeed(baud));
-
-    USERIAL_Open(linux_cb.port, &linux_cb.open_cfg, linux_cb.ser_cb);
-#else /* amba uart */
-    fprintf(stderr, "userial_change_rate(): changeing baud rate via TCIO \n");
-    ALOGI( "userial_change_rate: (): changeing baud rate via TCIO \n");
-    /* change baud rate in settings - leave everything else the same  */
-    linux_cb.open_cfg.baud = baud;
-    if (!userial_to_tcio_baud(linux_cb.open_cfg.baud, &tcio_baud))
-        return;
-
-    tcflush(linux_cb.sock, TCIOFLUSH);
-
-    /* get current settings. they should be fine besides baud rate we want to change */
-    tcgetattr(linux_cb.sock, &termios);
-
-    /* set input/output baudrate */
-    cfsetospeed(&termios, tcio_baud);
-    cfsetispeed(&termios, tcio_baud);
-    tcsetattr(linux_cb.sock, TCSANOW, &termios);
-
-    tcflush(linux_cb.sock, TCIOFLUSH);
-#endif
-#endif   /* USING_BRCM_USB  */
-}
-
-/*******************************************************************************
-**
-** Function           userial_close_port
+** Function           DT_Nfc_close_port
 **
 ** Description        close the transport driver
 **
 ** Returns            Nothing
 **
 *******************************************************************************/
-void userial_close_port( void )
+void DT_Nfc_close_port( void )
 {
-    USERIAL_Close(linux_cb.port);
+    DT_Nfc_Close(linux_cb.port);
 }
 
 /*******************************************************************************
 **
-** Function           USERIAL_Ioctl
+** Function           DT_Nfc_Close
 **
-** Description        Perform an operation on a serial port.
-**
-** Output Parameter   The p_data parameter is either an input or output depending
-**                    on the operation.
-**
-** Returns            Nothing
-**
-*******************************************************************************/
-
-UDRV_API void    USERIAL_Ioctl(tUSERIAL_PORT port, tUSERIAL_OP op, tUSERIAL_IOCTL_DATA *p_data)
-{
-#if (defined LINUX_OS) && (LINUX_OS == TRUE)
-    USB_SCO_CONTROL ioctl_data;
-
-    /* just ignore port parameter as we are using USB in this case  */
-#endif
-
-    switch (op)
-    {
-    case USERIAL_OP_FLUSH:
-        break;
-    case USERIAL_OP_FLUSH_RX:
-        break;
-    case USERIAL_OP_FLUSH_TX:
-        break;
-    case USERIAL_OP_BAUD_WR:
-        ALOGI( "USERIAL_Ioctl: Received USERIAL_OP_BAUD_WR on port: %d, ioctl baud%i\n", port, p_data->baud);
-        linux_cb.port = port;
-        userial_change_rate(p_data->baud);
-        break;
-
-    default:
-        break;
-    }
-
-    return;
-}
-
-/*******************************************************************************
-**
-** Function           USERIAL_Close
-**
-** Description        Close a serial port
+** Description        Close the Physical Transport
 **
 ** Output Parameter   None
 **
 ** Returns            Nothing
 **
 *******************************************************************************/
-UDRV_API void    USERIAL_Close(tUSERIAL_PORT port)
+void DT_Nfc_Close(DT_Nfc_sConfig_t *pDriverConfig)
 {
     pthread_attr_t attr;
     pthread_t      close_thread;
 
     ALOGD ("%s: enter", __FUNCTION__);
+#ifdef PREV_LOGGING_MECH
+    NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Close - Closing Down ..\n");
+#else
+    NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Close - Closing Down ..");
+#endif
+
     // check to see if thread is already running
     if (pthread_mutex_trylock(&close_thread_mutex) == 0)
     {
@@ -1335,77 +1298,81 @@ UDRV_API void    USERIAL_Close(tUSERIAL_PORT port)
         // make thread detached, no other thread will join
         pthread_attr_init(&attr);
         pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-        pthread_create( &close_thread, &attr, (void *)userial_close_thread,(void*)port);
+        pthread_create( &close_thread, &attr, (void *)DT_Nfc_close_thread, (void*)pDriverConfig);
         pthread_attr_destroy(&attr);
+
+        /* Are we attempting to close down the current connection */
+        if (!strcmp(pDriverConfig->devFile, DriverConfig.devFile)){
+            DriverConfig.nRef       = 0;
+            DriverConfig.phyType    = ENUM_LINK_TYPE_NONE;
+#ifdef PREV_LOGGING_MECH
+            NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Close : Device Node Matches\n");
+#else
+            NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Close : Device Node Matches");
+#endif
+        }
+        else{
+#ifdef PREV_LOGGING_MECH
+            NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Close : Requesting close of device node which is not open\n");
+#else
+            NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Close : Requesting close of device node which is not open");
+#endif
+        }
     }
     else
     {
         // mutex not aquired to thread is already running
-        ALOGD( "USERIAL_Close(): already closing \n");
+        ALOGD( "DT_Nfc_Close(): already closing \n");
     }
     ALOGD ("%s: exit", __FUNCTION__);
+
 }
-
-
 /*******************************************************************************
 **
-** Function         userial_close_thread
+** Function         DT_Nfc_close_thread
 **
-** Description      Thread to close USERIAL
+** Description      Close the DT reader thread
 **
 ** Returns          None.
 **
 *******************************************************************************/
-void userial_close_thread(UINT32 params)
+void DT_Nfc_close_thread(UINT32 params)
 {
     tUSERIAL_PORT port = (tUSERIAL_PORT )params;
     BT_HDR                  *p_buf = NULL;
+
     int result;
 
     ALOGD( "%s: closing transport (%d)\n", __FUNCTION__, linux_cb.sock);
+
     pthread_mutex_lock(&close_thread_mutex);
     is_close_thread_is_waiting = FALSE;
 
-    if (linux_cb.sock <= 0)
+    if (linux_cb.sock < 0)
     {
-        ALOGD( "%s: already closed (%d)\n", __FUNCTION__, linux_cb.sock);        
+        ALOGD( "%s: already closed (%d)\n", __FUNCTION__, linux_cb.sock);
         pthread_mutex_unlock(&close_thread_mutex);
         return;
     }
 
     send_wakeup_signal();
+
     result = pthread_join( worker_thread1, NULL );
     if ( result < 0 )
         ALOGE( "%s: pthread_join() FAILED: result: %d", __FUNCTION__, result );
     else
         ALOGD( "%s: pthread_join() joined: result: %d", __FUNCTION__, result );
 
-    if (linux_cb.sock_power_control > 0)
-    {
-        result = ioctl(linux_cb.sock_power_control, BCMNFC_WAKE_CTL, sleep_state());
-        ALOGD("%s: Delay %dms before turning off the chip", __FUNCTION__, gPrePowerOffDelay);
-        GKI_delay(gPrePowerOffDelay);
-        result = ioctl(linux_cb.sock_power_control, BCMNFC_POWER_CTL, 0);
-        ALOGD("%s: Delay %dms after turning off the chip", __FUNCTION__, gPostPowerOffDelay);
-        GKI_delay(gPostPowerOffDelay);
-    }
     result = close(linux_cb.sock);
-    if (result<0)
-        ALOGD("%s: close return %d", __FUNCTION__, result);
-
-    if (linux_cb.sock_power_control > 0 && linux_cb.sock_power_control != linux_cb.sock)
-    result = close(linux_cb.sock_power_control);
     if (result<0)
         ALOGD("%s: close return %d", __FUNCTION__, result);
 
     linux_cb.sock_power_control = -1;
     linux_cb.sock = -1;
 
-    close_signal_fds();
     pthread_mutex_unlock(&close_thread_mutex);
     ALOGD("%s: exiting", __FUNCTION__);
 }
-
 /*******************************************************************************
 **
 ** Function           USERIAL_Feature
@@ -1418,7 +1385,6 @@ void userial_close_thread(UINT32 params)
 **                    FALSE if the feature is not supported
 **
 *******************************************************************************/
-
 UDRV_API BOOLEAN USERIAL_Feature(tUSERIAL_FEATURE feature)
 {
     switch (feature)
@@ -1460,140 +1426,7 @@ UDRV_API BOOLEAN USERIAL_Feature(tUSERIAL_FEATURE feature)
     return FALSE;
 }
 
-/*****************************************************************************
-**
-** Function         UPIO_Set
-**
-** Description
-**      This function sets one or more GPIO devices to the given state.
-**      Multiple GPIOs of the same type can be masked together to set more
-**      than one GPIO. This function can only be used on types UPIO_LED and
-**      UPIO_GENERAL.
-**
-** Input Parameters:
-**      type    The type of device.
-**      pio     Indicates the particular GPIOs.
-**      state   The desired state.
-**
-** Output Parameter:
-**      None.
-**
-** Returns:
-**      None.
-**
-*****************************************************************************/
-UDRV_API void UPIO_Set(tUPIO_TYPE type, tUPIO pio, tUPIO_STATE new_state)
-{
-    int     ret;
-    if (type == UPIO_GENERAL)
-    {
-        if (pio == NFC_HAL_LP_NFC_WAKE_GPIO)
-        {
-            if (new_state == UPIO_ON || new_state == UPIO_OFF)
-            {
-                if (linux_cb.sock_power_control > 0)
-                {
-                    ALOGD("%s: ioctl, state=%d", __func__, new_state);
-                    ret = ioctl(linux_cb.sock_power_control, BCMNFC_WAKE_CTL, new_state);
-                    if (isWake(new_state) && nfc_wake_delay > 0 && new_state != current_nfc_wake_state)
-                    {
-                        ALOGD("%s: ioctl, old state=%d, insert delay for %d ms", __func__, current_nfc_wake_state, nfc_wake_delay);
-                        setWriteDelay(nfc_wake_delay);
-                    }
-                    current_nfc_wake_state = new_state;
-                }
-            }
-        }
-    }
-}
-
-/*****************************************************************************
-**
-** Function         setReadPacketSize
-**
-** Description
-**      This function sets the packetSize to the driver.
-**      this enables faster read operation of NCI/HCI responses
-**
-** Input Parameters:
-**      len     number of bytes to read per operation.
-**
-** Output Parameter:
-**      None.
-**
-** Returns:
-**      None.
-**
-*****************************************************************************/
-void setReadPacketSize(int len)
-{
-    int ret;
-    ALOGD("%s: ioctl, len=%d", __func__, len);
-    ret = ioctl(linux_cb.sock, BCMNFC_READ_FULL_PACKET, len);
-}
-
-
 UDRV_API BOOLEAN USERIAL_IsClosed()
 {
     return (linux_cb.sock == -1) ? TRUE : FALSE;
-}
-
-UDRV_API void USERIAL_PowerupDevice(tUSERIAL_PORT port)
-{
-    int ret = -1;
-    unsigned long num = 0;
-    unsigned int resetSuccess = 0;
-    unsigned int numTries = 0;
-    unsigned char spi_negotiation[64];
-
-    if ( GetNumValue ( NAME_READ_MULTI_PACKETS, &num, sizeof ( num ) ) )
-        bcmi2cnfc_read_multi_packets = num;
-
-    if (bcmi2cnfc_read_multi_packets > 0)
-        ioctl(linux_cb.sock, BCMNFC_READ_MULTI_PACKETS, bcmi2cnfc_read_multi_packets);
-
-    while (!resetSuccess && numTries < NUM_RESET_ATTEMPTS) {
-        if (numTries++ > 0) {
-            ALOGW("BCM2079x: retrying reset, attempt %d/%d", numTries, NUM_RESET_ATTEMPTS);
-        }
-        if (linux_cb.sock_power_control > 0)
-        {
-            ioctl(linux_cb.sock_power_control, BCMNFC_POWER_CTL, 0);
-            GKI_delay(10);
-            ioctl(linux_cb.sock_power_control, BCMNFC_POWER_CTL, 1);
-            current_nfc_wake_state = wake_state();
-            ret = ioctl(linux_cb.sock_power_control, BCMNFC_WAKE_CTL, current_nfc_wake_state);
-        }
-
-        ret = GetStrValue ( NAME_SPI_NEGOTIATION, (char*)spi_negotiation, sizeof ( spi_negotiation ) );
-        if (ret > 0 && spi_negotiation[0] > 0 && spi_negotiation[0] < sizeof ( spi_negotiation ) - 1)
-        {
-            int len = spi_negotiation[0];
-            /* Wake control is not available: Start SPI negotiation*/
-            USERIAL_Write(port, &spi_negotiation[1], len);
-            USERIAL_Read(port, spi_negotiation, sizeof ( spi_negotiation ));
-        }
-
-        if ( GetNumValue ( NAME_CLIENT_ADDRESS, &num, sizeof ( num ) ) )
-            bcmi2cnfc_client_addr = num & 0xFF;
-        if (bcmi2cnfc_client_addr != 0 &&
-            0x07 < bcmi2cnfc_client_addr &&
-            bcmi2cnfc_client_addr < 0x78)
-        {
-            ALOGD( "Change client address to %x\n", bcmi2cnfc_client_addr);
-            GKI_delay(gPowerOnDelay);
-            ret = ioctl(linux_cb.sock, BCMNFC_CHANGE_ADDR, bcmi2cnfc_client_addr);
-            if (!ret) {
-                resetSuccess = 1;
-                linux_cb.client_device_address = bcmi2cnfc_client_addr;
-            }
-        } else {
-            resetSuccess = 1;
-        }
-    }
-
-    if (!resetSuccess) {
-        ALOGE("BCM2079x: failed to initialize NFC controller");
-    }
-    GKI_delay(gPowerOnDelay);
 }

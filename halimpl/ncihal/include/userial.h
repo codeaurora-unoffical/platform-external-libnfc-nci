@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2001-2012 Broadcom Corporation
  *
@@ -243,17 +247,15 @@ typedef void (tUSERIAL_CBACK)(tUSERIAL_PORT, tUSERIAL_EVT, tUSERIAL_EVT_DATA *);
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 UDRV_API extern void    USERIAL_Init(void *);
 UDRV_API extern void    USERIAL_Open(tUSERIAL_PORT, tUSERIAL_OPEN_CFG *, tUSERIAL_CBACK *);
 UDRV_API extern void    USERIAL_ReadBuf(tUSERIAL_PORT, BT_HDR **);
-UDRV_API extern UINT16  USERIAL_Read(tUSERIAL_PORT, UINT8 *, UINT16);
 UDRV_API extern BOOLEAN USERIAL_WriteBuf(tUSERIAL_PORT, BT_HDR *);
-UDRV_API extern UINT16  USERIAL_Write(tUSERIAL_PORT, UINT8 *, UINT16);
 UDRV_API extern void    USERIAL_Ioctl(tUSERIAL_PORT, tUSERIAL_OP, tUSERIAL_IOCTL_DATA *);
 UDRV_API extern void    USERIAL_Close(tUSERIAL_PORT);
 UDRV_API extern BOOLEAN USERIAL_Feature(tUSERIAL_FEATURE);
 UDRV_API extern BOOLEAN USERIAL_IsClosed();
+
 UDRV_API extern void    USERIAL_PowerupDevice(tUSERIAL_PORT port);
 
 /*******************************************************************************

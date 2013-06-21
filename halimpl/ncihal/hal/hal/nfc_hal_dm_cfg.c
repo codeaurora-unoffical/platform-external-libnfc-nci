@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2011-2012 Broadcom Corporation
  *
@@ -28,35 +32,10 @@
 
 /* the SetConfig at start up*/
 UINT8 nfc_hal_start_up_cfg[] = {
-    /* TLV len */   28,
-    /* B0 */        NCI_PARAM_ID_EMVCO_ENABLE,
+    /* TLV len */   3,
+    /* B0 */        NCI_PARAM_ID_RF_FIELD_INFO,
     /* B1 */        1,
-    /* B2 */        1,     /* (1 = enable emvco mode, 0 = disable emvco mode) Default = 0.*/
-    /* B3 */        NCI_PARAM_ID_CONTINUE_MODE, /* NFCC will restart discovery after deactivated */
-    /* B4 */        1,
-    /* B5 */        1,     /* (1 = enable, 0 = disable) Default = 0.*/
-    /* B6 */        NCI_PARAM_ID_RFU_CONFIG,
-    /* B7 */        0x14,
-    /* B8 */        0x00,
-    /* B9 */        0x00,
-    /* B10*/        0x00,
-    /* B11*/        0x00,
-    /* B12*/        0x02,
-    /* B13*/        0xE8,
-    /* B14*/        0x03,
-    /* B15*/        0x00,
-    /* B16*/        0x00,
-    /* B17*/        0x00,
-    /* B18*/        0x00,
-    /* B19*/        0x00,
-    /* B20*/        0x00,
-    /* B21*/        0x00,
-    /* B22*/        0x00,
-    /* B23*/        0x00,
-    /* B24*/        0x00,
-    /* B25*/        0x00,
-    /* B26*/        0x00,
-    /* B27*/        0x00
+    /* B2 */        1
 };
 
 UINT8 *p_nfc_hal_dm_start_up_cfg = (UINT8 *) nfc_hal_start_up_cfg;
@@ -111,23 +90,6 @@ const UINT8 nfc_hal_dm_lptd_cfg[] =
 };
 
 UINT8 *p_nfc_hal_dm_lptd_cfg = (UINT8 *) &nfc_hal_dm_lptd_cfg[0];
-
-/* This must be configured before setting reader mode for 20791. No need to configure for 43341. */
-const UINT8 nfc_hal_dm_pll_325_cfg[NFC_HAL_XTAL_INDEX_MAX][NFC_HAL_PLL_325_SETCONFIG_PARAM_LEN] =
-{
-    {NCI_PARAM_ID_PLL325_CFG_PARAM, NCI_PARAM_LEN_PLL325_CFG_PARAM, 0x9A, 0x99, 0x99, 0x99, 0xD7, 0x03, 0x00, 0x87, 0x04, 0x1C, 0x0F, 0x00, 0x0B, FALSE}, /*  9.6 MHz */
-    {NCI_PARAM_ID_PLL325_CFG_PARAM, NCI_PARAM_LEN_PLL325_CFG_PARAM, 0xEF, 0x90, 0xA8, 0x22, 0xD0, 0x03, 0x00, 0x64, 0x06, 0x26, 0x0F, 0x00, 0x08, FALSE}, /* 13.0 MHz */
-    {NCI_PARAM_ID_PLL325_CFG_PARAM, NCI_PARAM_LEN_PLL325_CFG_PARAM, 0x5B, 0xB0, 0x05, 0x5B, 0xD8, 0x03, 0x00, 0x50, 0x07, 0x30, 0x0F, 0x00, 0x06, FALSE}, /* 16.2 MHz */
-    {NCI_PARAM_ID_PLL325_CFG_PARAM, NCI_PARAM_LEN_PLL325_CFG_PARAM, 0xCD, 0xCC, 0xCC, 0xCC, 0xD7, 0x03, 0x00, 0x43, 0x09, 0x39, 0x0F, 0x00, 0x04, FALSE}, /* 19.2 MHz */
-    {NCI_PARAM_ID_PLL325_CFG_PARAM, NCI_PARAM_LEN_PLL325_CFG_PARAM, 0xD7, 0xA3, 0x70, 0x3D, 0xD0, 0x03, 0x00, 0x36, 0x0B, 0x47, 0x0F, 0x00, 0x03, FALSE}, /* 24.0 MHz */
-    {NCI_PARAM_ID_PLL325_CFG_PARAM, NCI_PARAM_LEN_PLL325_CFG_PARAM, 0x78, 0x48, 0x54, 0x11, 0xD0, 0x03, 0x00, 0x32, 0x0C, 0x4D, 0x0F, 0x00, 0x02, FALSE}, /* 26.0 MHz */
-    {NCI_PARAM_ID_PLL325_CFG_PARAM, NCI_PARAM_LEN_PLL325_CFG_PARAM, 0xCD, 0xCC, 0xCC, 0xCC, 0xD7, 0x03, 0x00, 0x43, 0x09, 0x39, 0x0F, 0x00, 0x04, TRUE},  /* 38.4 MHz */
-    {NCI_PARAM_ID_PLL325_CFG_PARAM, NCI_PARAM_LEN_PLL325_CFG_PARAM, 0x78, 0x48, 0x54, 0x11, 0xD0, 0x03, 0x00, 0x32, 0x0C, 0x4D, 0x0F, 0x00, 0x02, TRUE},  /* 52.0 MHz */
-    {NCI_PARAM_ID_PLL325_CFG_PARAM, NCI_PARAM_LEN_PLL325_CFG_PARAM, 0x29, 0xB4, 0xE2, 0x9C, 0xCF, 0x03, 0x00, 0x45, 0x08, 0x37, 0x0F, 0x00, 0x04, TRUE}   /* 37.4 MHz */
-};
-
-UINT8 *p_nfc_hal_dm_pll_325_cfg = (UINT8 *) nfc_hal_dm_pll_325_cfg;
-
 
 /* set nfc_hal_prm_nvm_required to TRUE, if the platform wants to abort PRM process without NVM */
 BOOLEAN nfc_hal_prm_nvm_required = FALSE;

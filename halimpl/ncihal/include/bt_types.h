@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -481,10 +485,10 @@ typedef struct
 #define AMP_USE_AMP_IF_LC_AND_PEER_POWER_ON    4   /* Only try to use AMP if both LC and peer are powered on       */
 #define AMP_USE_AMP_IF_POSSIBLE                5   /* Try to use AMP if at all possible                            */
 #define AMP_USE_AMP_ONLY                       6   /* Only use AMP, never use BR/EDR                               */
-#define AMP_USE_AMP_MAX_DEF            AMP_USE_AMP_ONLY /* Maximum enum defined for AMP Criteria                        */
+#define AMP_USE_AMP_MAX_DEF						AMP_USE_AMP_ONLY /* Maximum enum defined for AMP Criteria          */
 
-#define	AMP_AUTOSWITCH_ALLOWED 		           0x80000000  /* flag to indicate that this connection is auto-switch ready */
-#define AMP_USE_CURRENT_CRITERIA               0xFFFFFFFF  /* Flag if previous criteria was to be still used        */
+#define	AMP_AUTOSWITCH_ALLOWED					0x80000000  /* flag to indicate that this connection is auto-switch ready */
+#define AMP_USE_CURRENT_CRITERIA				0xFFFFFFFF  /* Flag if previous criteria was to be still used        */
 
 typedef UINT32 tAMP_CRITERIA;
 

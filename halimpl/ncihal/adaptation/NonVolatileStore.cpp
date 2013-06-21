@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -66,7 +70,7 @@ void nfc_hal_nv_co_read (UINT8 *p_buf, UINT16 nbytes, UINT8 block)
         ALOGE ("%s: filename too long", __FUNCTION__);
         return;
     }
-    sprintf (filename, "%s%u", fn.c_str(), block);
+    snprintf (filename, 256, "%s%u", fn.c_str(), block);
 
     ALOGD ("%s: buffer len=%u; file=%s", __FUNCTION__, nbytes, filename);
     int fileStream = open (filename, O_RDONLY);
@@ -123,7 +127,7 @@ void nfc_hal_nv_co_write (const UINT8 *p_buf, UINT16 nbytes, UINT8 block)
         ALOGE ("%s: filename too long", __FUNCTION__);
         return;
     }
-    sprintf (filename, "%s%u", fn.c_str(), block);
+    snprintf (filename, 256, "%s%u", fn.c_str(), block);
     ALOGD ("%s: bytes=%u; file=%s", __FUNCTION__, nbytes, filename);
 
     fileStream = open (filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);

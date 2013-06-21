@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -22,7 +26,7 @@
  *
  ******************************************************************************/
 
-#define LOG_TAG "NfcNciHal"
+#define LOG_TAG "NfcHal"
 #include "OverrideLog.h"
 #include "Mutex.h"
 #include <errno.h>
