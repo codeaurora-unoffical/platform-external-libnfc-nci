@@ -47,6 +47,8 @@ NFC_HAL_TRANS_CFG_QUALIFIER tNFC_HAL_TRANS_CFG nfc_hal_trans_cfg =
     USERIAL_FC_HW                       /* Flow control */
 };
 
+static DT_Nfc_sConfig_t             gDrvCfg;
+void                                *gHwRef;
 /* Control block for NFC HAL NCI transport */
 #if NFC_DYNAMIC_MEMORY == FALSE
 tNFC_HAL_CB nfc_hal_cb;
@@ -103,15 +105,10 @@ void nfc_hal_main_init (void)
 ** Returns          nothing
 **
 *******************************************************************************/
-
-
-static DT_Nfc_sConfig_t     gDrvCfg;
-void                        *gHwRef;
-
-
 static void nfc_hal_main_open_transport (void)
 {
     tUSERIAL_OPEN_CFG open_cfg;
+    NFC_RETURN_CODE open_result = NFC_SUCCESS;
 
     /* Initialize control block */
     nfc_hal_cb.ncit_cb.rcv_state = NFC_HAL_RCV_IDLE_ST; /* to process packet type */
@@ -135,11 +132,16 @@ static void nfc_hal_main_open_transport (void)
     if(gHwRef== NULL){
         gHwRef= (void *)malloc(4024);
     }
-    DT_Nfc_Open(&gDrvCfg, &gHwRef, &nfc_hal_main_userial_cback);
-    /* notify transport opened */
-    nfc_hal_dm_pre_init_nfcc ();
+    open_result = DT_Nfc_Open(&gDrvCfg, &gHwRef, &nfc_hal_main_userial_cback);
+    if (open_result == NFC_SUCCESS){
+       /* notify transport opened */
+       nfc_hal_dm_pre_init_nfcc ();
+    }
+    else{
+       NCI_TRACE_ERROR0 ("DT_Nfc_Open: Fails");
+       nfc_hal_main_send_error (HAL_NFC_STATUS_ERR_TRANSPORT);
+    }
 }
-
 /*******************************************************************************
 **
 ** Function         nfc_hal_main_send_error
