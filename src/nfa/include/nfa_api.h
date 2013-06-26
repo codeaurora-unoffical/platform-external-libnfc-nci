@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2010-2012 Broadcom Corporation
  *
@@ -32,6 +36,10 @@
 #include "nfc_hal_api.h"
 #include "gki.h"
 
+#include <config.h>
+#define NFC_A_PASSIVE_LISTEN_MODE   0x80
+#define NFC_B_PASSIVE_LISTEN_MODE   0x81
+#define NFC_F_PASSIVE_LISTEN_MODE   0x82
 
 /*****************************************************************************
 **  Constants and data types
@@ -111,6 +119,7 @@ typedef UINT8 tNFA_PMID;
 #define NFA_TECHNOLOGY_MASK_A_ACTIVE    0x40    /* NFC Technology A active mode */
 #define NFA_TECHNOLOGY_MASK_F_ACTIVE    0x80    /* NFC Technology F active mode */
 #define NFA_TECHNOLOGY_MASK_ALL         0xFF    /* All supported technologies   */
+#define NFA_TECHNOLOGY_MASK_DEFAULT_LISTEN        0x07    /* default listen supported technologies(A(ISODEP) and F(NFCDEP)*/
 typedef UINT8 tNFA_TECHNOLOGY_MASK;
 
 /* Definitions for NFC protocol for RW, CE and P2P APIs */

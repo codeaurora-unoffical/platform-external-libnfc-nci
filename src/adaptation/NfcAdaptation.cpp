@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -25,7 +29,7 @@ extern "C"
 }
 #include "config.h"
 
-#define LOG_TAG "NfcAdaptation"
+#define LOG_TAG "NfcAdapt"
 
 extern "C" void GKI_shutdown();
 extern void resetConfig();
