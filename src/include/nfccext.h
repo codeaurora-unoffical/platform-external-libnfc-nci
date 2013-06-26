@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -58,7 +62,7 @@ extern void    lm_process_nfc (BT_HDR *p_msg);
 
 typedef UINT16 tNCI_DISCOVERY_MASK;
 
-#define NFCC_NUM_NFCEE      3
+#define NFCC_NUM_NFCEE      4
 /*
 ** Define a buffer that is used for data descriptors from HCID to LC
 */

@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -25,7 +29,7 @@
 #include "OverrideLog.h"
 #include <cutils/properties.h>
 #include "config.h"
-#define LOG_TAG "BrcmNfcJni"
+#define LOG_TAG "NfcJni"
 
 
 /*******************************************************************************
