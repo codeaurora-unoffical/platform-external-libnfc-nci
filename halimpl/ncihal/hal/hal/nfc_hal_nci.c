@@ -209,30 +209,38 @@ void nfc_hal_nci_assemble_nci_msg (void)
 *****************************************************************************/
 static BOOLEAN nfc_hal_nci_receive_nci_msg (tNFC_HAL_NCIT_CB *p_cb)
 {
-    UINT16      len = 0;
-    BOOLEAN     msg_received = FALSE;
-    NCI_TRACE_DEBUG1 ("nfc_hal_nci_receive_nci_msg+ 0x%08X", p_cb);
-    /* Start of new message. Allocate a buffer for message */
-    if ((p_cb->p_rcv_msg = (NFC_HDR *) GKI_getpoolbuf (NFC_HAL_NCI_POOL_ID)) != NULL)
-    {
-            /* Initialize NFC_HDR */
-        p_cb->p_rcv_msg->len    = 0;
-        p_cb->p_rcv_msg->event  = 0;
-        p_cb->p_rcv_msg->offset = 0;
-        p_cb->rcv_len = 252;
-        /* Read in the rest of the message */
-        len = DT_Nfc_Read(USERIAL_NFC_PORT, ((UINT8 *) (p_cb->p_rcv_msg + 1) + p_cb->p_rcv_msg->offset + p_cb->p_rcv_msg->len),  p_cb->rcv_len);
-    }
-    p_cb->p_rcv_msg->len    = len;
-    /* Check if we read in entire message yet */
-    if ( p_cb->p_rcv_msg->len != 0)
-    {
-        msg_received    = TRUE;
-        p_cb->rcv_state = NFC_HAL_RCV_IDLE_ST;
-    }
-    return (msg_received);
-}
+        UINT16      len = 0;
+        BOOLEAN     msg_received = FALSE;
 
+        NCI_TRACE_DEBUG1 ("nfc_hal_nci_receive_nci_msg+ 0x%08X", p_cb);
+        /* Start of new message. Allocate a buffer for message */
+        if ((p_cb->p_rcv_msg = (NFC_HDR *) GKI_getpoolbuf (NFC_HAL_NCI_POOL_ID)) != NULL)
+        {
+               /* Initialize NFC_HDR */
+               p_cb->p_rcv_msg->len    = 0;
+               p_cb->p_rcv_msg->event  = 0;
+               p_cb->p_rcv_msg->offset = 0;
+               p_cb->rcv_len = 252;
+               /* Read in the rest of the message */
+               len = DT_Nfc_Read(USERIAL_NFC_PORT, ((UINT8 *) (p_cb->p_rcv_msg + 1) + p_cb->p_rcv_msg->offset + p_cb->p_rcv_msg->len),  p_cb->rcv_len);
+               p_cb->p_rcv_msg->len    = len;
+               if (len == 0){
+                  GKI_freebuf(p_cb->p_rcv_msg);
+                  GKI_TRACE_ERROR_0("nfc_hal_nci_receive_nci_msg: Read Length = 0 so freeing pool !!\n");
+               }
+        }
+        else{
+           p_cb->p_rcv_msg->len    = 0;
+           GKI_TRACE_ERROR_0("nfc_hal_nci_receive_nci_msg: Unable to get pool buffer, ensure len = 0 \n");
+        }
+        /* Check if we read in entire message yet */
+        if ( p_cb->p_rcv_msg->len != 0)
+        {
+           msg_received    = TRUE;
+           p_cb->rcv_state = NFC_HAL_RCV_IDLE_ST;
+        }
+        return (msg_received);
+}
 /*****************************************************************************
 **
 ** Function         nfc_hal_nci_receive_bt_msg
@@ -518,44 +526,45 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
             /* Checking the rsp of NVM update cmd*/
             if(nvm_update_flag)
             {
-        if(nfc_hal_cb.nvm.no_of_updates >0)
-        {
-            if(mt == NCI_MT_RSP)
-            {
-                if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates >0))
+                if(nfc_hal_cb.nvm.no_of_updates >0)
                 {
-                    /* frame cmd now*/
-                    nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
-                    if(nvmcmd)
+                    if(mt == NCI_MT_RSP)
                     {
-                        nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
-                        /* send nvm update cmd(NCI POKE) to NFCC*/
-                        NCI_TRACE_DEBUG1 ("nfc_hal_nci_preproc_rx_nci_msg() : nfc_hal_cb.nvm.no_of_updates remained %d ",nfc_hal_cb.nvm.no_of_updates);
-                        nfc_hal_cb.nvm.no_of_updates--;
-                        nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
-                        nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
-                        free(nvmcmd);
-                        if(nfc_hal_cb.nvm.no_of_updates == 0)
+                        if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen)
+                           && (nfc_hal_cb.nvm.no_of_updates >0))
                         {
-                            /*all updates sent so close file again*/
-                            fclose( nfc_hal_cb.nvm.p_Nvm_file);
-                            nfc_hal_cb.nvm.p_Nvm_file = NULL;
-                            nfc_hal_cb.nvm.nvm_updated = TRUE;
-                            nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                            /* frame cmd now*/
+                            nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
+                            if(nvmcmd)
+                            {
+                                nfc_hal_dm_frame_mem_access_cmd(nvmcmd, nvmupdatebuff, &nvmcmdlen);
+                                /* send nvm update cmd(NCI POKE) to NFCC*/
+                                NCI_TRACE_DEBUG1 ("nfc_hal_cb.nvm.no_of_updates remained %d ",nfc_hal_cb.nvm.no_of_updates);
+                                nfc_hal_cb.nvm.no_of_updates--;
+                                nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                                nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
+                                free(nvmcmd);
+                                if(nfc_hal_cb.nvm.no_of_updates == 0)
+                                {
+                                    /*all updates sent so close file again*/
+                                    fclose( nfc_hal_cb.nvm.p_Nvm_file);
+                                    nfc_hal_cb.nvm.p_Nvm_file = NULL;
+                                    nfc_hal_cb.nvm.nvm_updated = TRUE;
+                                    nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                                }
+                                return TRUE;
+                            }
+                            /* Mem allocation failed*/
+                            return FALSE;
                         }
-                        return TRUE;
                     }
-                    /* Mem allocation failed*/
-                    return FALSE;
-               }
-            }
-        }
-        else
-        {
-            NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_POST_INIT_DONE);
-            nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
-            nfc_hal_dm_config_nfcc ();
-        }
+                }
+                else
+                {
+                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_POST_INIT_DONE);
+                    nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                    nfc_hal_dm_config_nfcc ();
+                }
             }
         }
         else if (gid == NCI_GID_RF_MANAGE)
