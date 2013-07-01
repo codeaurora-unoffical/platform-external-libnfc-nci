@@ -464,6 +464,7 @@ void    nfc_hal_nci_cmd_timeout_cback (void *p_tle);
 /* nfc_hal_dm.c */
 void nfc_hal_dm_init (void);
 void nfc_hal_dm_send_reset_cmd (void);
+void nfc_hal_dm_send_prop_sleep_cmd (void);
 void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg);
 void nfc_hal_dm_config_nfcc (void);
 void nfc_hal_dm_send_nci_cmd (const UINT8 *p_data, UINT16 len, tNFC_HAL_NCI_CBACK *p_cback);
