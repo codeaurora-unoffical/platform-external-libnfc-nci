@@ -75,6 +75,12 @@ const UINT8 nfc_hal_dm_core_reset_cmd[NCI_MSG_HDR_SIZE + NCI_CORE_PARAM_SIZE_RES
     NCI_RESET_TYPE_RESET_CFG
 };
 
+const UINT8 nfc_hal_dm_prop_sleep_cmd[NCI_MSG_HDR_SIZE] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    0x03,
+    0x00,
+};
 #define NCI_RAW_CMD    0x2F
 #define NCI_RAW_TYPE   0x00
 #define NCI_RAW_LENGTH 0x0D
@@ -400,6 +406,19 @@ void nfc_hal_dm_send_reset_cmd (void)
     nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_reset_cmd, NCI_MSG_HDR_SIZE + NCI_CORE_PARAM_SIZE_RESET, NULL);
 }
 
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_prop_sleep_cmd
+**
+** Description      Send CORE RESET CMD
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_sleep_cmd (void)
+{
+    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_prop_sleep_cmd, NCI_MSG_HDR_SIZE, NULL);
+}
 /*******************************************************************************
 **
 ** Function         dump_patch_data_g
