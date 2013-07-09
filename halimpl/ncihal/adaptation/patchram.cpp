@@ -691,6 +691,11 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
     UINT32 patch_len = 0;
     UINT8 patchlengthinfo[4] = {0};
 
+    if(patchdata == NULL || genproprsp == NULL )
+    {
+        return FALSE;
+    }
+
     memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
     patch_len = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
     if(memcmp((genproprsp+FW_VERSION_OFFSET),(patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \

@@ -569,7 +569,7 @@ UINT32 nfc_hal_main_task (UINT32 param)
                     GKI_freebuf (p_msg);
             }
         }
-        if ((event & NFC_HAL_TASK_EVT_DATA_RDY) || ( DT_unprocessed_data() > 0))
+        if ((event & NFC_HAL_TASK_EVT_DATA_RDY) || ( DT_Unprocessed_Data() > 0))
         {
             do{
                 if (nfc_hal_nci_receive_msg ())
@@ -593,7 +593,7 @@ UINT32 nfc_hal_main_task (UINT32 param)
                         nfc_hal_cb.ncit_cb.p_rcv_msg = NULL;
                     }
                 }
-            }while(DT_unprocessed_data() > 0);
+            }while(DT_Unprocessed_Data() > 0);
         }
         /* Process quick timer tick */
         if (event & NFC_HAL_QUICK_TIMER_EVT_MASK)

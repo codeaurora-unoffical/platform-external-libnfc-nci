@@ -43,7 +43,6 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <sys/select.h>
 #include <errno.h>
 
-
 #include <DT_Nfc_status.h>
 #include <DT_Nfc_types.h>
 #include <DT_Nfc_i2c.h>
@@ -54,11 +53,6 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #if defined(ANDROID)
 #include <string.h>
 #endif
-
-
-
-
-
 
 #define NFC_MSG_THRESH	NFC_ALL_LOGGING
 
@@ -73,7 +67,6 @@ typedef struct
 ------------------------------------------------------------------------------------*/
 static DT_Nfc_I2cInst I2C_Inst;
 
-
 /*-----------------------------------------------------------------------------
 
 FUNCTION: DT_Nfc_i2c_initialize
@@ -86,7 +79,6 @@ void DT_Nfc_i2c_initialize(void)
 {
    memset(&I2C_Inst, 0, sizeof(DT_Nfc_I2cInst));
 }
-
 
 /*-----------------------------------------------------------------------------
 
@@ -124,11 +116,7 @@ PURPOSE:  Closes the link
 
 void DT_Nfc_i2c_close(void)
 {
-#ifdef PREV_LOGGING_MECH
-   NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_i2c_close : Closing port\n");
-#else
    NCI_TRACE_DEBUG0 ("I2C:DT_Nfc_i2c_close : Closing port");
-#endif
    if (I2C_Inst.TransportStarted == 1)
    {
       close(I2C_Inst.DeviceFileHandle);
@@ -147,34 +135,22 @@ PURPOSE:  Closes the link
 
 NFC_RETURN_CODE DT_Nfc_i2c_setup(pDT_Nfc_sConfig_t pConfig, void ** pdTransportHandle)
 {
-#ifdef PREV_LOGGING_MECH
-	NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_i2c_setup\n");
-#else
    NCI_TRACE_DEBUG0 ("I2C:DT_Nfc_i2c_setup");
-#endif
-	pConfig->devFile = "/dev/nfc-nci";
-	pConfig->phyType  = ENUM_LINK_TYPE_I2C;
+   pConfig->devFile = "/dev/nfc-nci";
+   pConfig->phyType  = ENUM_LINK_TYPE_I2C;
 
    I2C_Inst.DeviceFileHandle = open(pConfig->devFile, O_RDWR | O_NOCTTY);
    if (I2C_Inst.DeviceFileHandle < 0)
    {
-#ifdef PREV_LOGGING_MECH
-	   NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_DEBUG, "I2C:DT_Nfc_i2c_setup : Open failed: open() returned %d \n", I2C_Inst.DeviceFileHandle);
-#else
        NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_setup : Open failed: open() returned %d \n", I2C_Inst.DeviceFileHandle);
-#endif
-	   *pdTransportHandle = NULL;
-	   return NFC_INVALID_NFCC;
+       *pdTransportHandle = NULL;
+       return NFC_INVALID_NFCC;
    }
 
    I2C_Inst.TransportStarted = 1;
    *pdTransportHandle = (void*)I2C_Inst.DeviceFileHandle;
 
-#ifdef PREV_LOGGING_MECH
-   NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_i2c_setup : status = %d, handle = %d \n", NFC_SUCCESS, (int)*pdTransportHandle);
-#else
-       NCI_TRACE_DEBUG2("I2C:DT_Nfc_i2c_setup : status = %d, handle = %d \n", NFC_SUCCESS, (int)*pdTransportHandle);
-#endif
+    NCI_TRACE_DEBUG2("I2C:DT_Nfc_i2c_setup : status = %d, handle = %d \n", NFC_SUCCESS, (int)*pdTransportHandle);
 
    return NFC_SUCCESS;
 }
@@ -196,11 +172,7 @@ int DT_Nfc_i2c_read(uint8_t * pStore, int NumToRd)
     struct timeval tv;
     fd_set rfds;
 
-#ifdef PREV_LOGGING_MECH
-    NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_i2c_read : read %d bytes \n", NumToRd);
-#else
     NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_read : read %d bytes \n", NumToRd);
-#endif
     while (numRead < NumToRd) {
         FD_ZERO(&rfds);
         FD_SET(I2C_Inst.DeviceFileHandle, &rfds);
@@ -208,45 +180,25 @@ int DT_Nfc_i2c_read(uint8_t * pStore, int NumToRd)
         tv.tv_usec = 0;
         ret = select(I2C_Inst.DeviceFileHandle + 1, &rfds, NULL, NULL, &tv);
         if (ret < 0) {
-#ifdef PREV_LOGGING_MECH
-        NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_DEBUG, "I2C:DT_Nfc_i2c_read : select() errno = %d \n", errno);
-#else
-        NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_read : select() errno = %d \n", errno);
-#endif
+            NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_read : select() errno = %d \n", errno);
             if (errno == EINTR || errno == EAGAIN) {
                 continue;
             }
             return -1;
         } else if (ret == 0) {
-#ifdef PREV_LOGGING_MECH
-           NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_DEBUG, "I2C:DT_Nfc_i2c_read : Timeout!");
-#else
-           NCI_TRACE_DEBUG0("I2C:DT_Nfc_i2c_read : Timeout!");
-#endif
+            NCI_TRACE_DEBUG0("I2C:DT_Nfc_i2c_read : Timeout!");
             return -1;
         }
         ret = read(I2C_Inst.DeviceFileHandle, pStore + numRead, NumToRd - numRead);
 
         if (ret > 0) {
-#ifdef PREV_LOGGING_MECH
-			NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_DEBUG, "I2C:DT_Nfc_i2c_read : read %d bytes\n", ret);
-#else
-           NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_read : read %d bytes", ret);
-#endif
+            NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_read : read %d bytes", ret);
             numRead += ret;
         } else if (ret == 0) {
-#ifdef PREV_LOGGING_MECH
-			NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_DEBUG, "I2C:DT_Nfc_i2c_read : EOF\n");
-#else
-           NCI_TRACE_DEBUG0("I2C:DT_Nfc_i2c_read : EOF");
-#endif
+            NCI_TRACE_DEBUG0("I2C:DT_Nfc_i2c_read : EOF");
             return -1;
         } else {
-#ifdef PREV_LOGGING_MECH
-			NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_DEBUG, "I2C:DT_Nfc_i2c_read : errno=%d \n", errno);
-#else
-           NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_read : errno=%d \n", errno);
-#endif
+            NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_read : errno=%d \n", errno);
             if (errno == EINTR || errno == EAGAIN) {
                 continue;
             }
@@ -269,45 +221,26 @@ int DT_Nfc_i2c_write(uint8_t * pStore, int NumToWr)
     int ret;
     int numWrote = 0;
 
-#ifdef PREV_LOGGING_MECH
-	NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_i2c_write value = %d, length = %d \n", *pStore, NumToWr);
-#else
     NCI_TRACE_DEBUG2("I2C:DT_Nfc_i2c_write value = %d, length = %d ", *pStore, NumToWr);
-#endif
 
     while (numWrote < NumToWr) {
         ret = write(I2C_Inst.DeviceFileHandle, pStore + numWrote, NumToWr - numWrote);
-		if (ret > 0) {
-#ifdef PREV_LOGGING_MECH
-			NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_DEBUG, "I2C:DT_Nfc_i2c_write : wrote %d bytes \n", ret);
-#else
+        if (ret > 0) {
             NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_write : wrote %d bytes", ret);
-#endif
-			numWrote += ret;
-		} else if (ret == 0) {
-#ifdef PREV_LOGGING_MECH
-			NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_DEBUG, "I2C:DT_Nfc_i2c_write : EOF\n");
-#else
+
+            numWrote += ret;
+        } else if (ret == 0) {
             NCI_TRACE_DEBUG0("I2C:DT_Nfc_i2c_write : EOF");
-#endif
-			return -1;
-		} else {
-#ifdef PREV_LOGGING_MECH
-			NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_DEBUG, "DT_Nfc_i2c_write : errno=%d \n", errno);
-#else
+            return -1;
+        } else {
             NCI_TRACE_DEBUG1("DT_Nfc_i2c_write : errno=%d \n", errno);
-#endif
-			if (errno == EINTR || errno == EAGAIN) {
-				continue;
-			}
-			return -1;
-		}
+            if (errno == EINTR || errno == EAGAIN) {
+                continue;
+            }
+            return -1;
+        }
     }
-#ifdef PREV_LOGGING_MECH
-	NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_i2c_write : Wrote = %d bytes\n", numWrote);
-#else
     NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_write : Wrote = %d bytes\n", numWrote);
-#endif
     return numWrote;
 }
 
@@ -321,15 +254,9 @@ PURPOSE:  Control the (GPIO_RESET/VEN) pin, legacy Reset Pin
 -----------------------------------------------------------------------------*/
 int DT_Nfc_i2c_reset(long state)
 {
-#ifdef PREV_LOGGING_MECH
-	NFC_MSG(NFC_TO_LOGGER_PLUS_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_i2c_reset : VEN state = %d \n", state);
-#else
     NCI_TRACE_DEBUG1("I2C:DT_Nfc_i2c_reset : VEN state = %d \n", state);
-#endif
-
     return ioctl(I2C_Inst.DeviceFileHandle, NFC_SET_PWR, state);
 
-    return 0;
 }
 /*-----------------------------------------------------------------------------
 
@@ -341,11 +268,7 @@ PURPOSE:  Set the mode to communicate with the NFCC,
 -----------------------------------------------------------------------------*/
 int DT_Nfc_set_controller_mode(long mode)
 {
-#ifdef PREV_LOGGING_MECH
-	NFC_MSG(NFC_TO_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_set_controller_mode, Vmode = %d \n", mode);
-#else
     NCI_TRACE_DEBUG1("I2C:DT_Nfc_set_controller_mode, Vmode = %d \n", mode);
-#endif
     return ioctl(I2C_Inst.DeviceFileHandle, NFCC_MODE, mode);
 }
 
@@ -358,11 +281,7 @@ PURPOSE:  Set the mode to communicate with the NFCC
 -----------------------------------------------------------------------------*/
 int DT_Nfc_set_rx_block_number(long block_number)
 {
-#ifdef PREV_LOGGING_MECH
-	NFC_MSG(NFC_TO_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_set_rx_block_number, block number = %d \n", block_number);
-#else
     NCI_TRACE_DEBUG1("I2C:DT_Nfc_set_rx_block_number, block number = %d \n", block_number);
-#endif
     return ioctl(I2C_Inst.DeviceFileHandle, SET_RX_BLOCK, block_number);
 }
 
@@ -376,10 +295,6 @@ PURPOSE: Configure the emulation platform to output test points to header
 -----------------------------------------------------------------------------*/
 int DT_Nfc_set_test_point_number(int TestPointNumber)
 {
-#ifdef PREV_LOGGING_MECH
-	NFC_MSG(NFC_TO_CONSOLE, NFC_MSG_THRESH, NFC_INFO, "I2C:DT_Nfc_set_test_point_number, test point number = %d \n", TestPointNumber);
-#else
     NCI_TRACE_DEBUG1("I2C:DT_Nfc_set_test_point_number, test point number = %d \n", TestPointNumber);
-#endif
     return ioctl(I2C_Inst.DeviceFileHandle, SET_EMULATOR_TEST_POINT, TestPointNumber);
 }

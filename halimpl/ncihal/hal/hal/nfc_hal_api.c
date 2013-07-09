@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -27,6 +31,7 @@
 #include "nfc_hal_api.h"
 #include "nfc_hal_int.h"
 
+char current_mode = 0;
 /*******************************************************************************
 ** NFC_HAL_TASK declarations
 *******************************************************************************/
@@ -96,13 +101,14 @@ void HAL_NfcTerminate(void)
 ** Returns          void
 **
 *******************************************************************************/
-void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback)
+void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback, char mode)
 {
-    NCI_TRACE_API0 ("HAL_NfcOpen ()");
+    NCI_TRACE_API1("HAL_NfcOpen (): mode=%d",mode);
 
     /* Only handle if HAL is not opened (stack cback is NULL) */
     if (p_hal_cback)
     {
+        current_mode = mode;
         nfc_hal_dm_init ();
         nfc_hal_cb.p_stack_cback = p_hal_cback;
         nfc_hal_cb.p_data_cback  = p_data_cback;
