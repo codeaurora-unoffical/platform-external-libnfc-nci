@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2010-2012 Broadcom Corporation
  *
@@ -870,7 +874,48 @@ static tNFC_STATUS nfa_dm_send_deactivate_cmd (tNFC_DEACT_TYPE deactivate_type)
 
     return status;
 }
+/******************************************************************************************
+**
+** Function         nfa_dm_set_default_listen_mode_routing_table
+**
+** Description      Reads default listen mode routing from conf file and propagate this to
+**                  NFCC.
+**
+** Returns          void
+**
+******************************************************************************************/
+void nfa_dm_set_default_listen_mode_routing_table(void)
+{
+    UINT8   *ptlv_data=NULL, tlv_size=0;
+    UINT8   num_tlv=0,more=0,nfceeid=0;
+    UINT8 default_listen_mode_routing_table[30]={0};
 
+    NFA_TRACE_DEBUG0("NFA nfa_dm_set_default_listen_mode_routing_table: Start ");
+
+    if ( GetStrValue ("DEFAULT_LISTEN_MODE_ROUTING", (char*)default_listen_mode_routing_table, sizeof(default_listen_mode_routing_table ) ) )
+    {
+        NFA_TRACE_DEBUG4( "default_listen_mode_routing_table = %02x:%02x:%02x:%02x",
+                                                                            default_listen_mode_routing_table[0],
+                                                                            default_listen_mode_routing_table[1],
+                                                                            default_listen_mode_routing_table[2],
+                                                                            default_listen_mode_routing_table[3]);
+        more = default_listen_mode_routing_table[0];
+        num_tlv = default_listen_mode_routing_table[1];
+        tlv_size = default_listen_mode_routing_table[2];
+        NFA_TRACE_DEBUG0("NFA nfa_dm_set_default_listen_mode_routing_table: calling NFC_SetRouting ");
+        NFC_SetRouting(more, nfceeid, num_tlv, tlv_size, default_listen_mode_routing_table+3);
+        NFA_TRACE_DEBUG0("NFA nfa_dm_set_default_listen_mode_routing_table: End NFC_SetRouting ");
+    }
+    else
+    {
+       UINT8 default_listen_mode_routing_table[10]= {0x01,0x03,0x00,0x01,0x04,0x01,0x03,0x00,0x01,0x05};
+       NFA_TRACE_DEBUG0 ("No default listen mode routing table found in conf file...Sending Defauslt from code");
+       num_tlv = 2;
+       tlv_size = 10;
+       NFC_SetRouting(more, nfceeid, num_tlv, tlv_size, default_listen_mode_routing_table);
+    }
+    NFA_TRACE_DEBUG0("NFA nfa_dm_set_default_listen_mode_routing_table: End ");
+}
 /*******************************************************************************
 **
 ** Function         nfa_dm_start_rf_discover
@@ -885,6 +930,7 @@ void nfa_dm_start_rf_discover (void)
     tNFC_DISCOVER_PARAMS    disc_params[NFA_DM_MAX_DISC_PARAMS];
     tNFA_DM_DISC_TECH_PROTO_MASK dm_disc_mask = 0, poll_mask, listen_mask;
     UINT8                   num_params, xx;
+    UINT32 listenmask = 0;
 
     NFA_TRACE_DEBUG0 ("nfa_dm_start_rf_discover ()");
     /* Make sure that RF discovery was enabled, or some app has exclusive control */
@@ -1023,6 +1069,53 @@ void nfa_dm_start_rf_discover (void)
     /* Get Discovery Technology parameters */
     num_params = nfa_dm_get_rf_discover_config (dm_disc_mask, disc_params, NFA_DM_MAX_DISC_PARAMS);
 
+    NFA_TRACE_DEBUG1 ("num_params = %d", num_params);
+
+    if(GetNumValue(NAME_UICC_LISTEN_TECH_MASK, &listenmask, sizeof(listenmask)))
+    {
+        NFA_TRACE_DEBUG0("NFA SET DISC: NAME_UICC_LISTEN_TECH_MASK found");
+        if(listenmask != 0)
+        {
+            if(listenmask  == NFA_TECHNOLOGY_MASK_DEFAULT_LISTEN)
+            {
+                NFA_TRACE_DEBUG0("NFA SET DISC: Default Listen config found...(Listen A and F)");
+                /*set the listen tech , mode and freq for listen discovery*/
+                disc_params[num_params].type      = NFC_F_PASSIVE_LISTEN_MODE;
+                disc_params[num_params].frequency = 1;
+                disc_params[num_params+1].type      = NFC_B_PASSIVE_LISTEN_MODE;
+                disc_params[num_params+1].frequency = 1;
+                disc_params[num_params+2].type      = NFC_A_PASSIVE_LISTEN_MODE;
+                disc_params[num_params+2].frequency = 1;
+                num_params +=3 ;
+             }
+             else if((listenmask & NFA_TECHNOLOGY_MASK_B) == NFA_TECHNOLOGY_MASK_B)
+             {
+                 NFA_TRACE_DEBUG0("NFA SET DISC: NFC-B listen tech found");
+                 /*set the listen tech , mode and freq for listen discovery*/
+                 disc_params[num_params].type      = NFC_B_PASSIVE_LISTEN_MODE;
+                 disc_params[num_params].frequency = 1;
+                 num_params += 1 ;
+             }
+             else if((listenmask & NFA_TECHNOLOGY_MASK_F) == NFA_TECHNOLOGY_MASK_F)
+              {
+                  NFA_TRACE_DEBUG0("NFA SET DISC: NFC-F listen tech found");
+                  disc_params[num_params].type      = NFC_F_PASSIVE_LISTEN_MODE;
+                  disc_params[num_params].frequency = 1;
+                  num_params += 1 ;
+              }
+              else if((listenmask & NFA_TECHNOLOGY_MASK_A) == NFA_TECHNOLOGY_MASK_A)
+              {
+                  NFA_TRACE_DEBUG0("NFA SET DISC: NFC-A listen tech found");
+                  disc_params[num_params].type      = NFC_A_PASSIVE_LISTEN_MODE;
+                  disc_params[num_params].frequency = 1;
+                  num_params += 1 ;
+              }
+              else
+              {
+                  NFA_TRACE_DEBUG0("NFA SET DISC: No proper mask found for listen technology");
+              }
+         }
+    }
     if (num_params)
     {
         /*
@@ -1037,7 +1130,7 @@ void nfa_dm_start_rf_discover (void)
             /* update listening protocols in each NFC technology */
             nfa_dm_set_rf_listen_mode_config (dm_disc_mask);
         }
-
+        nfa_dm_set_default_listen_mode_routing_table();
         /* Set polling duty cycle */
         nfa_dm_set_total_duration ();
         nfa_dm_cb.disc_cb.dm_disc_mask = dm_disc_mask;

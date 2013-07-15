@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -72,7 +76,7 @@ int GetNumValue(const char* name, void* p_value, unsigned long len);
 #define                     LPTD_PARAM_LEN (40)
 
 // default configuration
-#define default_transport       "/dev/bcm2079x"
+#define default_transport       "/dev/nfc-nci"
 #define default_storage_location "/data/nfc"
 
 struct tUART_CONFIG {
