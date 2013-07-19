@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2010-2012 Broadcom Corporation
  *
@@ -39,7 +43,7 @@ tNFA_EE_CB nfa_ee_cb;
 #endif
 
 #ifndef NFA_EE_DISCV_TIMEOUT_VAL
-#define NFA_EE_DISCV_TIMEOUT_VAL    2000
+#define NFA_EE_DISCV_TIMEOUT_VAL    1000
 #endif
 
 

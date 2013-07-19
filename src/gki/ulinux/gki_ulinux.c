@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -513,7 +517,7 @@ void GKI_run (void *p_task_id)
               NULL) != 0 )
     {
         GKI_TRACE_0("GKI_run: pthread_create failed to create timer_thread!");
-        return GKI_FAILURE;
+        return;
     }
 #else
     GKI_TRACE_2("GKI_run, run_cond(%x)=%d ", p_run_cond, *p_run_cond);
@@ -560,7 +564,7 @@ void GKI_run (void *p_task_id)
     } /* for */
 #endif
     GKI_TRACE_1("%s exit", __func__);
-    return(0);
+    return;
 }
 
 
@@ -640,20 +644,6 @@ UINT16 GKI_wait (UINT16 flag, UINT32 timeout)
 
     /* protect OSWaitEvt[rtask] from modification from an other thread */
     pthread_mutex_lock(&gki_cb.os.thread_evt_mutex[rtask]);
-
-#if 0 /* for clean scheduling we probably should always call pthread_cond_wait() */
-    /* Check if anything in any of the mailboxes. There is a potential race condition where OSTaskQFirst[rtask]
-     has been modified. however this should only result in addtional call to  pthread_cond_wait() but as
-     the cond is met, it will exit immediately (depending on schedulling) */
-    if (gki_cb.com.OSTaskQFirst[rtask][0])
-    gki_cb.com.OSWaitEvt[rtask] |= TASK_MBOX_0_EVT_MASK;
-    if (gki_cb.com.OSTaskQFirst[rtask][1])
-    gki_cb.com.OSWaitEvt[rtask] |= TASK_MBOX_1_EVT_MASK;
-    if (gki_cb.com.OSTaskQFirst[rtask][2])
-    gki_cb.com.OSWaitEvt[rtask] |= TASK_MBOX_2_EVT_MASK;
-    if (gki_cb.com.OSTaskQFirst[rtask][3])
-    gki_cb.com.OSWaitEvt[rtask] |= TASK_MBOX_3_EVT_MASK;
-#endif
 
     if (!(gki_cb.com.OSWaitEvt[rtask] & flag))
     {
