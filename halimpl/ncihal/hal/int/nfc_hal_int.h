@@ -47,6 +47,7 @@ extern "C" {
 /****************************************************************************
 ** NFC HAL TASK transport definitions
 ****************************************************************************/
+#define FTM_MODE 1
 /* NFC HAL Task event masks */
 #define NFC_HAL_TASK_EVT_DATA_RDY               EVENT_MASK (APPL_EVT_0)
 #define NFC_HAL_TASK_EVT_INITIALIZE             EVENT_MASK (APPL_EVT_5)
@@ -431,6 +432,7 @@ typedef struct
     UINT8                   max_rf_credits;     /* NFC Max RF data credits */
     UINT8                   trace_level;        /* NFC HAL trace level */
     tNFC_HAL_NVM_CB         nvm;                /* NVM update CB(control block)*/
+    UINT8                   propd_sleep;
 } tNFC_HAL_CB;
 
 /* Global NCI data */

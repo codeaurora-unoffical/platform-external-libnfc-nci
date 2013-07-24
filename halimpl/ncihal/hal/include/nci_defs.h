@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -222,6 +226,14 @@ typedef UINT8 tNCI_STATUS;
 #define NCI_MSG_RF_EE_ACTION            9
 #define NCI_MSG_RF_EE_DISCOVERY_REQ     10
 #define NCI_MSG_RF_PARAMETER_UPDATE     11
+
+/**********************************************
+ * Proprietary Group Opcode    - 1
+ **********************************************/
+#define NCI_MSG_PROP_MEMACCESS          00
+#define NCI_MSG_PROP_GENERIC            01
+#define NCI_MSG_PROP_ROMINFO            02
+#define NCI_MSG_PROP_SLEEP              03
 
 /**********************************************
  * NFCEE MANAGEMENT Group Opcode - 2

@@ -117,6 +117,8 @@ extern	void			DT_Nfc_TestClose(DT_Nfc_sConfig_t *pDriverConfig);
 extern	NFC_RETURN_CODE	DT_Nfc_ControllerMode(long ReaderMode);
 extern	NFC_RETURN_CODE	DT_Nfc_SetTestPoint(long TestPointNumber);
 extern	NFC_RETURN_CODE	DT_Nfc_SetRxBlockNumber(long BlockNumber);
+extern  NFC_RETURN_CODE	DT_Set_Power(int state);
+extern  uint16_t		DT_Unprocessed_Data();
 
 
 #endif /* DTNFC_H */

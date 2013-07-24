@@ -315,6 +315,7 @@ void NfcAdaptation::HalOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK* p
     ALOGD ("%s", func);
     if (mHalDeviceContext)
     {
+        mHalDeviceContext->common.reserved[0] = ANDROID_MODE;
         mHalCallback = p_hal_cback;
         mHalDataCallback = p_data_cback;
         mHalDeviceContext->open (mHalDeviceContext, HalDeviceContextCallback, HalDeviceContextDataCallback);

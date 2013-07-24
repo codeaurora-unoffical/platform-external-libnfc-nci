@@ -48,6 +48,7 @@
 #define NCI_RAW_TYPE   0x00
 #define NCI_RAW_LENGTH 0x0D
 
+extern char current_mode;
 const UINT8 nfc_hal_dm_RCU[NCI_MSG_HDR_SIZE + NCI_RAW_LENGTH];
 
 /* HCI_SendNfcRawLMAC */
@@ -480,11 +481,13 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
     UINT16 data_len;
     UINT8 nvmupdatebuff[260]={0},nvmdatabufflen=0;
     UINT8 *nvmcmd = NULL,nvmcmdlen = 0;
-    UINT32 nvm_update_flag=0;
+    UINT32 nvm_update_flag = 0;
+    UINT32 pm_flag = 0;
 
     NCI_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg()");
     GetNumValue("NVM_UPDATE_ENABLE_FLAG", &nvm_update_flag, sizeof(nvm_update_flag));
     NCI_TRACE_DEBUG1("NVM_UPDATE_ENABLE_FLAG : %d",nvm_update_flag);
+    GetNumValue("PM_ENABLE_FLAG", &pm_flag, sizeof(pm_flag));
 
     /* if initializing BRCM NFCC */
     if (nfc_hal_cb.dev_cb.initializing_state != NFC_HAL_INIT_STATE_IDLE)
@@ -514,7 +517,14 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
             }
         }
 
-        if (gid == NCI_GID_PROP) /* this is for hci netwk ntf */
+        if ((gid == NCI_GID_PROP)&&(op_code == NCI_MSG_PROP_SLEEP))
+        {
+            nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+            nfc_hal_main_stop_quick_timer (&nfc_hal_cb.ncit_cb.nci_wait_rsp_timer);
+            NCI_TRACE_DEBUG0 ("NCI_MSG_PROP_SLEEP received");
+        }
+
+        if ((gid == NCI_GID_PROP)&&(op_code == NCI_MSG_PROP_MEMACCESS))
         {
             if (mt == NCI_MT_NTF)
             {
@@ -526,44 +536,47 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
             /* Checking the rsp of NVM update cmd*/
             if(nvm_update_flag)
             {
-                if(nfc_hal_cb.nvm.no_of_updates >0)
+                if(current_mode != FTM_MODE)
                 {
-                    if(mt == NCI_MT_RSP)
+                    if(nfc_hal_cb.nvm.no_of_updates > 0)
                     {
-                        if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen)
-                           && (nfc_hal_cb.nvm.no_of_updates >0))
+                        if(mt == NCI_MT_RSP)
                         {
-                            /* frame cmd now*/
-                            nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
-                            if(nvmcmd)
+                            if(nfc_hal_dm_check_nvm_file(nvmupdatebuff, &nvmdatabufflen)
+                               && (nfc_hal_cb.nvm.no_of_updates > 0))
                             {
-                                nfc_hal_dm_frame_mem_access_cmd(nvmcmd, nvmupdatebuff, &nvmcmdlen);
-                                /* send nvm update cmd(NCI POKE) to NFCC*/
-                                NCI_TRACE_DEBUG1 ("nfc_hal_cb.nvm.no_of_updates remained %d ",nfc_hal_cb.nvm.no_of_updates);
-                                nfc_hal_cb.nvm.no_of_updates--;
-                                nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
-                                nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
-                                free(nvmcmd);
-                                if(nfc_hal_cb.nvm.no_of_updates == 0)
+                                /* frame cmd now*/
+                                nvmcmd = (UINT8*)malloc(nvmdatabufflen + 10);
+                                if(nvmcmd)
                                 {
-                                    /*all updates sent so close file again*/
-                                    fclose( nfc_hal_cb.nvm.p_Nvm_file);
-                                    nfc_hal_cb.nvm.p_Nvm_file = NULL;
-                                    nfc_hal_cb.nvm.nvm_updated = TRUE;
+                                    nfc_hal_dm_frame_mem_access_cmd(nvmcmd, nvmupdatebuff, &nvmcmdlen);
+                                    /* send nvm update cmd(NCI POKE) to NFCC*/
+                                    NCI_TRACE_DEBUG1 ("nfc_hal_cb.nvm.no_of_updates remained %d ",nfc_hal_cb.nvm.no_of_updates);
+                                    nfc_hal_cb.nvm.no_of_updates--;
                                     nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                                    nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
+                                    free(nvmcmd);
+                                    if(nfc_hal_cb.nvm.no_of_updates == 0)
+                                    {
+                                        /*all updates sent so close file again*/
+                                        fclose( nfc_hal_cb.nvm.p_Nvm_file);
+                                        nfc_hal_cb.nvm.p_Nvm_file = NULL;
+                                        nfc_hal_cb.nvm.nvm_updated = TRUE;
+                                        nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                                    }
+                                    return TRUE;
                                 }
-                                return TRUE;
+                                /* Mem allocation failed*/
+                                return FALSE;
                             }
-                            /* Mem allocation failed*/
-                            return FALSE;
                         }
                     }
-                }
-                else
-                {
-                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_POST_INIT_DONE);
-                    nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
-                    nfc_hal_dm_config_nfcc ();
+                    else
+                    {
+                        NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_POST_INIT_DONE);
+                        nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                        nfc_hal_dm_config_nfcc ();
+                    }
                 }
             }
         }
@@ -583,6 +596,27 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                             *p = nfc_hal_cb.max_rf_credits;
                         }
                     }
+                    nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
+                }
+            }
+            if (pm_flag)
+            {
+                if (mt == NCI_MT_RSP)
+                {
+                        if (op_code == NCI_MSG_RF_DISCOVER
+                            /*|| op_code == NCI_MSG_RF_DEACTIVATE*/
+                            )
+                        {
+                            if (*p  == 0x00) //status good
+                            {
+                                nfc_hal_dm_send_prop_sleep_cmd ();
+                                if (op_code == NCI_MSG_RF_DEACTIVATE)
+                                {
+                                    NCI_TRACE_DEBUG0 ("NCI_MSG_RF_DEACTIVATE propd_sleep");
+                                    nfc_hal_cb.propd_sleep = 1;
+                                }
+                            }
+                        }
                 }
             }
         }
@@ -602,38 +636,41 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                         nfc_hal_cb.hci_cb.b_check_clear_all_pipe_cmd = TRUE;
                     }
                 }
-               if(nvm_update_flag)
-               {
-                   if (op_code == NCI_MSG_CORE_INIT)
-                   {
-                       NCI_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg() : Second CORE_INIT Rsp recieved...checking nvm file again");
-                    if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates >0))
+                if(current_mode != FTM_MODE)
+                {
+                    if(nvm_update_flag)
                     {
-                        /* frame cmd now*/
-                        nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
-                        if(nvmcmd)
+                        if (op_code == NCI_MSG_CORE_INIT)
                         {
-                            nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
-                            /* send nvm update cmd(NCI POKE) to NFCC*/
-                            NCI_TRACE_DEBUG1 ("nfc_hal_nci_preproc_rx_nci_msg() : nfc_hal_cb.nvm.no_of_updates remained %d ",nfc_hal_cb.nvm.no_of_updates);
-                            nfc_hal_cb.nvm.no_of_updates--;
-                            nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
-                            free(nvmcmd);
-                            if(nfc_hal_cb.nvm.no_of_updates == 0)
+                            NCI_TRACE_DEBUG0 ("Second CORE_INIT Rsp recieved...checking nvm file again");
+                            if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates > 0))
                             {
-                                /*all updates sent so close file again*/
-                                NCI_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg() : in NCI_MT_RSP");
-                                fclose( nfc_hal_cb.nvm.p_Nvm_file);
-                                nfc_hal_cb.nvm.p_Nvm_file = NULL;
-                                nfc_hal_cb.nvm.nvm_updated = TRUE;
-                                nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                                /* frame cmd now*/
+                                nvmcmd = (UINT8*)malloc(nvmdatabufflen + 10);
+                                if(nvmcmd)
+                                {
+                                    nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
+                                    /* send nvm update cmd(NCI POKE) to NFCC*/
+                                    NCI_TRACE_DEBUG1 ("nfc_hal_cb.nvm.no_of_updates remained %d ",nfc_hal_cb.nvm.no_of_updates);
+                                    nfc_hal_cb.nvm.no_of_updates--;
+                                    nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
+                                    free(nvmcmd);
+                                    if(nfc_hal_cb.nvm.no_of_updates == 0)
+                                    {
+                                        /*all updates sent so close file again*/
+                                        NCI_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg() : in NCI_MT_RSP");
+                                        fclose( nfc_hal_cb.nvm.p_Nvm_file);
+                                        nfc_hal_cb.nvm.p_Nvm_file = NULL;
+                                        nfc_hal_cb.nvm.nvm_updated = TRUE;
+                                        nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                                    }
+                                    return TRUE;
+                                }
+                                /*Memory allocation failed*/
+                                return FALSE;
                             }
-                            return TRUE;
                         }
-                        /*Memory allocation failed*/
-                        return FALSE;
                     }
-                }
                 }
             }
         }

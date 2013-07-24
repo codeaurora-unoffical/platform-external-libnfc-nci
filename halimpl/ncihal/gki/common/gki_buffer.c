@@ -104,7 +104,6 @@ static BOOLEAN gki_alloc_free_queue(UINT8 id)
 {
     FREE_QUEUE_T  *Q;
     tGKI_COM_CB *p_cb = &gki_cb.com;
-    printf("\ngki_alloc_free_queue in, id:%d \n", id);
 
     Q = &p_cb->freeq[p_cb->pool_list[id]];
 
@@ -114,14 +113,11 @@ static BOOLEAN gki_alloc_free_queue(UINT8 id)
         if(p_mem)
         {
             //re-initialize the queue with allocated memory
-            printf("\ngki_alloc_free_queue calling  gki_init_free_queue, id:%d  size:%d, totol:%d\n", id, Q->size, Q->total);
             gki_init_free_queue(id, Q->size, Q->total, p_mem);
-            printf("\ngki_alloc_free_queue ret OK, id:%d  size:%d, totol:%d\n", id, Q->size, Q->total);
             return TRUE;
         }
         GKI_exception (GKI_ERROR_BUF_SIZE_TOOBIG, "gki_alloc_free_queue: Not enough memory");
     }
-    printf("\ngki_alloc_free_queue out failed, id:%d\n", id);
     return FALSE;
 }
 #endif

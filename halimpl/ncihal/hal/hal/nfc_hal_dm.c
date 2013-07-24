@@ -183,6 +183,7 @@ UINT8 *pPatch_buff = NULL;
 UINT8 op_code1 = 1;
 #define NCI_PATCH_INFO_OFFSET_NVMTYPE  35  /* NVM Type offset in patch info RSP */
 
+static int sleep_nfcc = 0;
 /*****************************************************************************
 ** Extern function prototypes
 *****************************************************************************/
@@ -417,7 +418,11 @@ void nfc_hal_dm_send_reset_cmd (void)
 *******************************************************************************/
 void nfc_hal_dm_send_prop_sleep_cmd (void)
 {
-    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_prop_sleep_cmd, NCI_MSG_HDR_SIZE, NULL);
+    if ( !sleep_nfcc )
+    {
+        nfc_hal_dm_send_nci_cmd (nfc_hal_dm_prop_sleep_cmd, NCI_MSG_HDR_SIZE, NULL);
+        sleep_nfcc = 1;
+    }
 }
 /*******************************************************************************
 **
@@ -1217,6 +1222,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                     nfc_hal_cb.nvm.no_of_updates--;
                     nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
                     free(nvmcmd);
+                    nvmcmd = NULL;
                     if(nfc_hal_cb.nvm.no_of_updates == 0)
                     {
                         /* All updates sent so close file now*/
@@ -1452,6 +1458,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                     nfc_hal_cb.nvm.no_of_updates--;
                     nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
                     free(nvmcmd);
+                    nvmcmd = NULL;
                     if(nfc_hal_cb.nvm.no_of_updates == 0)
                     {
                         /* All updates sent so close file now*/
@@ -1527,9 +1534,21 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                         nfc_hal_cb.dev_cb.patch_signature_chk = FALSE;
                         nfc_hal_cb.dev_cb.patch_data_offset = 0;
                         nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
-                        free(pPatch_buff);
-                        free(prepatchdata);
-                        free(patchdata);
+                        if ( pPatch_buff != NULL)
+                        {
+                            free(pPatch_buff);
+                            pPatch_buff = NULL;
+                        }
+                        if ( prepatchdata != NULL)
+                        {
+                            free(prepatchdata);
+                            prepatchdata = NULL;
+                        }
+                        if ( patchdata != NULL)
+                        {
+                            free(patchdata);
+                            patchdata = NULL;
+                        }
                         prepatchdatalen = 0;
                         patchdatalen = 0;
                         NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
@@ -1561,9 +1580,21 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                     nfc_hal_cb.dev_cb.patch_signature_chk = FALSE;
                     nfc_hal_cb.dev_cb.patch_data_offset = 0;
                     nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
-                    free(pPatch_buff);
-                    free(prepatchdata);
-                    free(patchdata);
+                    if (pPatch_buff != NULL)
+                    {
+                        free(pPatch_buff);
+                        pPatch_buff = NULL;
+                    }
+                    if (prepatchdata != NULL)
+                    {
+                        free(prepatchdata);
+                        prepatchdata = NULL;
+                    }
+                    if (patchdata != NULL)
+                    {
+                        free(patchdata);
+                        patchdata = NULL;
+                    }
                     prepatchdatalen = 0;
                     patchdatalen = 0;
                     NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
@@ -1632,12 +1663,7 @@ void nfc_hal_dm_send_nci_cmd (const UINT8 *p_data, UINT16 len, tNFC_HAL_NCI_CBAC
 {
     NFC_HDR *p_buf;
     UINT8  *ps;
-    static int rst;
     NCI_TRACE_DEBUG1 ("nfc_hal_dm_send_nci_cmd (): nci_wait_rsp = 0x%x", nfc_hal_cb.ncit_cb.nci_wait_rsp);
-    if(p_data[0]==0x20 && p_data[1]==0)
-    {
-      rst= 1;
-    }
     if (nfc_hal_cb.ncit_cb.nci_wait_rsp != NFC_HAL_WAIT_RSP_NONE)
     {
         NCI_TRACE_ERROR0 ("nfc_hal_dm_send_nci_cmd(): no command window");
@@ -1665,16 +1691,9 @@ void nfc_hal_dm_send_nci_cmd (const UINT8 *p_data, UINT16 len, tNFC_HAL_NCI_CBAC
         nfc_hal_cb.ncit_cb.p_vsc_cback = (void *)p_cback;
 
         nfc_hal_nci_send_cmd (p_buf);
-        if(!rst)
-        { /* start NFC command-timeout timer */
+        /* start NFC command-timeout timer */
         nfc_hal_main_start_quick_timer (&nfc_hal_cb.ncit_cb.nci_wait_rsp_timer, (UINT16)(NFC_HAL_TTYPE_NCI_WAIT_RSP),
                                         ((UINT32) NFC_HAL_CMD_TOUT) * QUICK_TIMER_TICKS_PER_SEC / 1000);
-        }
-        else
-        {
-          nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
-          rst=0;
-        }
     }
 }
 
@@ -1789,14 +1808,22 @@ void nfc_hal_dm_set_nfc_wake (UINT8 cmd)
     NCI_TRACE_DEBUG1 ("nfc_hal_dm_set_nfc_wake () %s",
                       (cmd == NFC_HAL_ASSERT_NFC_WAKE ? "ASSERT" : "DEASSERT"));
 
-    /*
-    **  nfc_wake_active_mode             cmd              result of voltage on NFC_WAKE
-    **
-    **  NFC_HAL_LP_ACTIVE_LOW (0)    NFC_HAL_ASSERT_NFC_WAKE (0)    pull down NFC_WAKE (GND)
-    **  NFC_HAL_LP_ACTIVE_LOW (0)    NFC_HAL_DEASSERT_NFC_WAKE (1)  pull up NFC_WAKE (VCC)
-    **  NFC_HAL_LP_ACTIVE_HIGH (1)   NFC_HAL_ASSERT_NFC_WAKE (0)    pull up NFC_WAKE (VCC)
-    **  NFC_HAL_LP_ACTIVE_HIGH (1)   NFC_HAL_DEASSERT_NFC_WAKE (1)  pull down NFC_WAKE (GND)
-    */
+    if (cmd == NFC_HAL_ASSERT_NFC_WAKE)
+    {
+        NCI_TRACE_DEBUG1 ("NFC_HAL_ASSERT_NFC_WAKE() cmd = %d", cmd);
+
+        DT_Set_Power(4);
+        sleep_nfcc = 0;
+    }
+    else if (cmd == NFC_HAL_DEASSERT_NFC_WAKE)
+    {
+        NCI_TRACE_DEBUG1 ("NFC_HAL_DEASSERT_NFC_WAKE() cmd = %d", cmd);
+        nfc_hal_dm_send_prop_sleep_cmd ();
+    }
+    else
+    {
+        NCI_TRACE_DEBUG1 ("nfc_hal_dm_set_nfc_wake() cmd = %d", cmd);
+    }
 }
 
 /*******************************************************************************
@@ -1814,37 +1841,24 @@ BOOLEAN nfc_hal_dm_power_mode_execute (tNFC_HAL_LP_EVT event)
 {
     BOOLEAN send_to_nfcc = FALSE;
 
-
     NCI_TRACE_DEBUG1 ("nfc_hal_dm_power_mode_execute () event = %d", event);
 
-    if (nfc_hal_cb.dev_cb.power_mode == NFC_HAL_POWER_MODE_FULL)
+    if (nfc_hal_cb.dev_cb.power_mode == NFC_HAL_POWER_MODE_FULL || sleep_nfcc )
     {
-        if (nfc_hal_cb.dev_cb.snooze_mode != NFC_HAL_LP_SNOOZE_MODE_NONE)
+        /* if idle timer is not running */
+        if (sleep_nfcc == 1)
         {
-            /* if any transport activity */
-            if (  (event == NFC_HAL_LP_TX_DATA_EVT)
-                ||(event == NFC_HAL_LP_RX_DATA_EVT)  )
-            {
-                /* if idle timer is not running */
-                if (nfc_hal_cb.dev_cb.lp_timer.in_use == FALSE)
-                {
-                    nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
-                }
-
-                /* start or extend idle timer */
-                nfc_hal_main_start_quick_timer (&nfc_hal_cb.dev_cb.lp_timer, 0x00,
-                                                ((UINT32) NFC_HAL_LP_IDLE_TIMEOUT) * QUICK_TIMER_TICKS_PER_SEC / 1000);
-            }
-            else if (event == NFC_HAL_LP_TIMEOUT_EVT)
-            {
-                /* let NFCC go to snooze mode */
-                nfc_hal_dm_set_nfc_wake (NFC_HAL_DEASSERT_NFC_WAKE);
-            }
+            NCI_TRACE_DEBUG1 ("nfc_hal_dm_power_mode_execute ()wake up = %d", NFC_HAL_ASSERT_NFC_WAKE);
+            nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
         }
-
+        if (  (event == NFC_HAL_LP_TX_DATA_EVT)
+              ||(event == NFC_HAL_LP_RX_DATA_EVT)  )
+        {
+            nfc_hal_main_start_quick_timer (&nfc_hal_cb.dev_cb.lp_timer, 0x00,
+                                        ((UINT32) NFC_HAL_LP_IDLE_TIMEOUT) * QUICK_TIMER_TICKS_PER_SEC / 1000);
+        }
         send_to_nfcc = TRUE;
     }
-
     return (send_to_nfcc);
 }
 
@@ -1877,16 +1891,18 @@ static void nci_brcm_lp_timeout_cback (void *p_tle)
 void nfc_hal_dm_pre_init_nfcc (void)
 {
     NCI_TRACE_DEBUG0 ("nfc_hal_dm_pre_init_nfcc ()");
+    if(!(nfc_post_reset_cb.dev_init_config.flags))
+    {
+        NCI_TRACE_DEBUG0 ("*******NFCC hard rest**********");
+        DT_Set_Power(1);
+        DT_Set_Power(0);
+        /* Invoke kernel routine to re-initialise NFCC as ALL config will be lost */
+        DT_Set_Power(2);
+    }
 
-    if (nfc_post_reset_cb.dev_init_config.flags & NFC_HAL_DEV_INIT_FLAGS_SET_XTAL_FREQ)
-    {
-        //nfc_hal_dm_set_xtal_freq_index ();
-    }
-    else
-    {
-        /* Send RESET CMD if application registered callback for device initialization */
-        nfc_hal_dm_send_reset_cmd ();
-    }
+    /* Send RESET CMD if application registered callback for device initialization */
+    nfc_hal_dm_send_reset_cmd ();
+    nfc_post_reset_cb.dev_init_config.flags = 1;
 }
 
 /*******************************************************************************
@@ -1909,7 +1925,7 @@ void nfc_hal_dm_shutting_down_nfcc (void)
     if (  (nfc_hal_cb.dev_cb.power_mode  == NFC_HAL_POWER_MODE_FULL)
         &&(nfc_hal_cb.dev_cb.snooze_mode != NFC_HAL_LP_SNOOZE_MODE_NONE)  )
     {
-        nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
+        nfc_hal_dm_set_nfc_wake (NFC_HAL_DEASSERT_NFC_WAKE);
     }
 
     nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;

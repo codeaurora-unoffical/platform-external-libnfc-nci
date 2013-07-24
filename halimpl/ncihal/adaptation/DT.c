@@ -57,6 +57,7 @@
 #define BTE_APPL_MAX_USERIAL_DEV_NAME       (256)
 #endif
 extern UINT8 appl_trace_level;
+extern char current_mode;
 
 /* Mapping of USERIAL_PORT_x to linux */
 extern UINT32 ScrProtocolTraceFlag;
@@ -151,7 +152,7 @@ static pthread_t      worker_thread1 = 0;
 typedef struct  {
     volatile unsigned long bt_wake_state;
     int             sock;
-    tUSERIAL_CBACK      *ser_cb;
+    tUSERIAL_CBACK  *ser_cb;
     UINT16      baud;
     UINT8       data_bits;
     UINT16      parity;
@@ -170,7 +171,7 @@ static tLINUX_CB linux_cb;  /* case of multipel port support use array : [MAX_SE
 void DT_Nfc_close_thread(UINT32 params);
 
 static UINT8 device_name[30];
-static int   bSerialPortDevice = FALSE;
+static int  bSerialPortDevice = FALSE;
 static int _timeout = POLL_TIMEOUT;
 static BOOLEAN is_close_thread_is_waiting = FALSE;
 
@@ -382,6 +383,16 @@ static inline int isWake(int state)
         current_nfc_wake_state == asserted_state;
 }
 
+NFC_RETURN_CODE DT_Set_Power(int state)
+{
+    int ret;
+    if (state >= 0)
+    {
+        ret = dTransport.rst(state);
+    }
+    return 0;
+}
+
 /*******************************************************************************
 **
 ** Function           setWriteDelay
@@ -508,7 +519,6 @@ static inline void close_signal_fds()
 static inline int send_wakeup_signal()
 {
     char sig_on = 1;
-    ALOGD("%s: Sending signal to %d", __func__, signal_fds[1]);
     return send(signal_fds[1], &sig_on, sizeof(sig_on), 0);
 }
 
@@ -524,7 +534,6 @@ static inline int send_wakeup_signal()
 static inline int reset_signal()
 {
     char sig_recv = 0;
-    ALOGD("%s: Receiving signal from %d", __func__, signal_fds[0]);
     recv(signal_fds[0], &sig_recv, sizeof(sig_recv), MSG_WAITALL);
     return (int)sig_recv;
 }
@@ -778,7 +787,6 @@ UINT32 DT_read_thread(UINT32 arg)
 
     worker_thread1 = pthread_self();
 
-    ALOGD( "start DT_read_thread, id=%lx", worker_thread1);
     _timeout = POLL_TIMEOUT;
 
     for (;linux_cb.sock > 0;)
@@ -852,24 +860,20 @@ UINT32 DT_read_thread(UINT32 arg)
         }
     } /* for */
 
-    ALOGD( "DT_read_thread(): freeing GKI_buffers\n");
     while ((p_buf = (BT_HDR *) GKI_dequeue (&Userial_in_q)) != NULL)
     {
         GKI_freebuf(p_buf);
-        ALOGD("DT_read_thread: dequeued buffer from Userial_in_q\n");
     }
 
     GKI_exit_task (GKI_get_taskid ());
-    ALOGD( "DT READ: EXITING TASK\n");
 
     return 0;
 }
 
-UINT16 DT_unprocessed_data()
+UINT16 DT_Unprocessed_Data()
 {
     UINT16 len=0;
     len = GKI_queue_length (&Userial_in_q);
-    ALOGD( "DT_unprocessed_data: %d\n",len);
     return len;
 }
 
@@ -978,27 +982,16 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
             break;
    }
 
-#ifdef PREV_LOGGING_MECH
-   NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open\n");
-#else
    NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open");
-#endif
+
    if (pDriverConfig->devFile == NULL) {
-#ifdef PREV_LOGGING_MECH
-       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_ERROR, "DT:DT_Nfc_Open : devFile NULL\n");
-#else
        NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : devFile NULL");
-#endif
        return NFC_FAILED;
    }
 
    if ((pDriverConfig == NULL) || (pdTransportHandle == NULL))
    {
-#ifdef PREV_LOGGING_MECH
-       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_ERROR, "DT:DT_Nfc_Open : phwref == NULL\n");
-#else
        NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : phwref == NULL");
-#endif
        return NFC_INVALID;
    }
 
@@ -1010,21 +1003,11 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
       case ENUM_LINK_TYPE_UART:
       case ENUM_LINK_TYPE_USB:
       {
-#ifdef  PREV_LOGGING_MECH
-         NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : UART link Config\n");
-#else
-         NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : UART link Config");
-#endif
       }
       break;
 
       case ENUM_LINK_TYPE_I2C:
       {
-#ifdef  PREV_LOGGING_MECH
-         NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : I2C link Config\n");
-#else
-         NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : I2C link Config");
-#endif
          dTransport.init        = DT_Nfc_i2c_initialize;
          dTransport.close       = DT_Nfc_i2c_close;
          dTransport.setup       = DT_Nfc_i2c_setup;
@@ -1040,38 +1023,21 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
 
    if (retstatus != NFC_SUCCESS)
    {
-#ifdef  PREV_LOGGING_MECH
-         NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : can't open DT ...\n");
-#else
-         NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : can't open DT ..");
-#endif
+       NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : can't open DT ..");
        retstatus = NFC_FAILED;
        return retstatus;
    }
 
    if ((int) (*pdTransportHandle) == 0){
-#ifdef  PREV_LOGGING_MECH
-       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : Open but assigned 0 close it down !!! ...\n");
-       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open : Try to reassign ...\n");
-#else
          NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : Open but assigned 0 close it down !!! ...");
          NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : Try to reassign ...");
-#endif
          retstatus = dTransport.setup(pDriverConfig, pdTransportHandle);
-#ifdef  PREV_LOGGING_MECH
-         NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open (second):  New Handle = %d ...\n",(int) (*pdTransportHandle) );
-#else
          NCI_TRACE_DEBUG1("DT:DT_Nfc_Open (second):  New Handle = %d ...\n",(int) (*pdTransportHandle) );
-#endif
    }
 
    if (retstatus != NFC_SUCCESS)
    {
-#ifdef PREV_LOGGING_MECH
-        NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Open (second): can't open DT ...\n");
-#else
-        NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open (second): can't open DT ...");
-#endif
+       NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open (second): can't open DT ...");
        retstatus = NFC_FAILED;
        return retstatus;
    }
@@ -1084,11 +1050,7 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
 
    /* Initialise semaphore */
    if(sem_init(&data_available, 0, 0) == -1){
-#ifdef PREV_LOGGING_MECH
-       NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_ERROR, "DT:DT_Nfc_Open : NFC Init Semaphore creation Error\n");
-#else
         NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Open : NFC Init Semaphore creation Error");
-#endif
         return -1;
    }
 
@@ -1141,7 +1103,6 @@ UDRV_API UINT16  DT_Nfc_Read(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
     UINT16 copy_len = 0;
     UINT8 * current_packet = NULL;
 
-    ALOGD( "%s ++ len=%d pbuf_dt_Read=%p, p_data=%p\n", __func__, len, pbuf_dt_Read, p_data);
     if (pbuf_dt_Read == NULL && (total_len < len))
         pbuf_dt_Read = (BT_HDR *)GKI_dequeue(&Userial_in_q);
 
@@ -1168,7 +1129,6 @@ UDRV_API UINT16  DT_Nfc_Read(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
         }
     }
 
-    ALOGD( "%s: returned %d bytes", __func__, total_len);
     return total_len;
 }
 /*******************************************************************************
@@ -1231,7 +1191,21 @@ UDRV_API UINT16  DT_Nfc_Write(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
 
     doWriteDelay();
     ALOGD_IF((appl_trace_level>=BT_TRACE_LEVEL_DEBUG), "DT_Nfc_Write: (%d bytes) - \n", len);
-    ALOGD( "%s ++ len=%d DT_Nfc_Write= p_data=%p\n", __func__, len, p_data);
+    if(current_mode == FTM_MODE)
+    {
+        if(p_data[0] == 0xFF)
+        {
+            p_data = p_data + 1;
+            len--;
+            DT_Nfc_set_controller_mode(2);
+            NCI_TRACE_DEBUG3("FTM_MODE : len = %X p_data[0]=%x p_data[1] = %x",len,p_data[0],p_data[1]);
+        }
+        else
+        {
+            NCI_TRACE_DEBUG0("FTM_MODE : Setting mode to 0");
+            DT_Nfc_set_controller_mode(0);
+        }
+    }
     t = clock();
     while (len != 0)
     {
@@ -1281,11 +1255,6 @@ void DT_Nfc_Close(DT_Nfc_sConfig_t *pDriverConfig)
     pthread_t      close_thread;
 
     ALOGD ("%s: enter", __FUNCTION__);
-#ifdef PREV_LOGGING_MECH
-    NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Close - Closing Down ..\n");
-#else
-    NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Close - Closing Down ..");
-#endif
 
     // check to see if thread is already running
     if (pthread_mutex_trylock(&close_thread_mutex) == 0)
@@ -1305,18 +1274,8 @@ void DT_Nfc_Close(DT_Nfc_sConfig_t *pDriverConfig)
         if (!strcmp(pDriverConfig->devFile, DriverConfig.devFile)){
             DriverConfig.nRef       = 0;
             DriverConfig.phyType    = ENUM_LINK_TYPE_NONE;
-#ifdef PREV_LOGGING_MECH
-            NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Close : Device Node Matches\n");
-#else
-            NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Close : Device Node Matches");
-#endif
         }
         else{
-#ifdef PREV_LOGGING_MECH
-            NFC_MSG(NFC_TO_LOGGER, NFC_MSG_THRESH, NFC_INFO, "DT:DT_Nfc_Close : Requesting close of device node which is not open\n");
-#else
-            NCI_TRACE_DEBUG0 ("DT:DT_Nfc_Close : Requesting close of device node which is not open");
-#endif
         }
     }
     else
@@ -1343,7 +1302,6 @@ void DT_Nfc_close_thread(UINT32 params)
 
     int result;
 
-    ALOGD( "%s: closing transport (%d)\n", __FUNCTION__, linux_cb.sock);
 
     pthread_mutex_lock(&close_thread_mutex);
     is_close_thread_is_waiting = FALSE;
@@ -1360,8 +1318,6 @@ void DT_Nfc_close_thread(UINT32 params)
     result = pthread_join( worker_thread1, NULL );
     if ( result < 0 )
         ALOGE( "%s: pthread_join() FAILED: result: %d", __FUNCTION__, result );
-    else
-        ALOGD( "%s: pthread_join() joined: result: %d", __FUNCTION__, result );
 
     result = close(linux_cb.sock);
     if (result<0)
@@ -1369,6 +1325,8 @@ void DT_Nfc_close_thread(UINT32 params)
 
     linux_cb.sock_power_control = -1;
     linux_cb.sock = -1;
+
+    close_signal_fds();
 
     pthread_mutex_unlock(&close_thread_mutex);
     ALOGD("%s: exiting", __FUNCTION__);

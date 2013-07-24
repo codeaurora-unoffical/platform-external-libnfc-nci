@@ -98,7 +98,7 @@ int HaiTerminateLibrary ()
 }
 
 
-int HaiOpen (const nfc_dev_t* device, nfc_stack_callback_t* halCallbackFunc, nfc_stack_data_callback_t* halDataCallbackFunc)
+int HaiOpen (const nfc_dev_t* device, nfc_stack_callback_t* halCallbackFunc, nfc_stack_data_callback_t* halDataCallbackFunc, char mode)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -107,7 +107,7 @@ int HaiOpen (const nfc_dev_t* device, nfc_stack_callback_t* halCallbackFunc, nfc
     gAndroidHalDataCallback = halDataCallbackFunc;
 
     SyncEventGuard guard (gOpenCompletedEvent);
-    HAL_NfcOpen (NfcHalCallback, NfcHalDataCallback);
+    HAL_NfcOpen (NfcHalCallback, NfcHalDataCallback, mode);
     gOpenCompletedEvent.wait ();
 
     retval = 0;
