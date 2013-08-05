@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2009-2013 Broadcom Corporation
  *
@@ -203,7 +207,16 @@ extern const char * const nfc_hal_init_state_str[];
 #else
 #define NFC_HAL_SET_INIT_STATE(state)  nfc_hal_cb.dev_cb.initializing_state = state;
 #endif
+#define FTM_MODE 1
 
+/*****************************************************************************
+*  NVM Update related defnitions
+*****************************************************************************/
+#define NUM_OF_BYTES_ACCESS_FLAG         0x01
+#define NUM_OF_BYTES_START_ADDR          0x04
+#define NUM_OF_BYTES_NUMBER_OF_ITEMS     0x01
+#define NUM_OF_BYTES_ADD_DELTA           0x01
+#define NUM_OF_BYTES_ACCESS_DELAY        0x02
 
 /* NFC HAL - NFCC initializing state */
 enum
@@ -218,8 +231,22 @@ enum
     NFC_HAL_INIT_STATE_W4_POST_INIT_DONE,  /* Waiting for complete of post init     */
     NFC_HAL_INIT_STATE_W4_CONTROL_DONE,    /* Waiting for control release           */
     NFC_HAL_INIT_STATE_W4_PREDISCOVER_DONE,/* Waiting for complete of prediscover   */
-    NFC_HAL_INIT_STATE_CLOSING             /* Shutting down                         */
+    NFC_HAL_INIT_STATE_CLOSING,            /* Shutting down                         */
+    NFC_HAL_INIT_FOR_PATCH_DNLD,           /* hal init for patch download to happen*/
+    NFC_HAL_INIT_STATE_W4_RE_INIT          /* Waiting for reset rsp on ReInit       */
+
 };
+
+
+typedef struct
+{
+    /*nvm update related */
+    FILE  *p_Nvm_file;
+    UINT16 no_of_updates;
+    UINT8 nvm_updated;
+} tNFC_HAL_NVM_CB;
+
+
 typedef UINT8 tNFC_HAL_INIT_STATE;
 
 /* NFC HAL - NFCC config items during post initialization */
@@ -373,7 +400,7 @@ typedef struct
 {
     tNFC_HAL_INIT_STATE     initializing_state;     /* state of initializing NFCC               */
 
-    UINT32                  brcm_hw_id;             /* BRCM NFCC HW ID                          */
+    UINT32                  m_hw_id;                /* NFCC HW ID                          */
     tNFC_HAL_DM_CONFIG      next_dm_config;         /* next config in post initialization       */
     UINT8                   next_startup_vsc;       /* next start-up VSC offset in post init    */
 
@@ -381,10 +408,22 @@ typedef struct
     UINT8                   snooze_mode;            /* current snooze mode                      */
     UINT8                   new_snooze_mode;        /* next snooze mode after receiving cmpl    */
     UINT8                   nfc_wake_active_mode;   /* NFC_HAL_LP_ACTIVE_LOW/HIGH               */
+    UINT8                   nfcc_sleep_mode;
     TIMER_LIST_ENT          lp_timer;               /* timer for low power mode                 */
 
 
     tHAL_NFC_STATUS_CBACK   *p_prop_cback;          /* callback to notify complete of proprietary update */
+    UINT8                    patch_applied;
+    UINT8                    fw_version_chk;                  /*Flag to indicate if FW version check is done or not */
+    UINT8                    pre_patch_signature_chk;         /*Flag to indicate if pre patch signature check is done or not */
+    UINT8                    patch_signature_chk;             /*Flag to indicate if patch signature check is done or not */
+    UINT8                    pre_patch_applied;               /* Flag to keep track if pre patch applied or not */
+    UINT8                    pre_init_done;                   /* Flag to keep track on pre init process completion in case of patch dnld*/
+    UINT32                   patch_data_offset;               /* Offset of patch data*/
+    UINT32                   number_of_patch_data_buffers;
+    UINT8                    pre_patch_file_available;       /* This flag will be set if pre patch file is available*/
+    UINT8                    patch_file_available;           /* This flag will be set if patch file is available*/
+
 } tNFC_HAL_DEV_CB;
 
 /* data members for NFC_HAL-HCI */
@@ -424,6 +463,12 @@ typedef struct
 
     UINT8                   max_rf_credits;     /* NFC Max RF data credits */
     UINT8                   trace_level;        /* NFC HAL trace level */
+    tNFC_HAL_NVM_CB         nvm;                /* NVM update CB(control block)*/
+
+    UINT8                   propd_sleep;
+    UINT8                   listen_setConfig_rsp_cnt;
+    UINT8                   act_interface;
+
 } tNFC_HAL_CB;
 
 /* Global NCI data */
@@ -448,14 +493,15 @@ void   nfc_hal_main_send_error (tHAL_NFC_STATUS status);
 void   nfc_hal_send_nci_msg_to_nfc_task (NFC_HDR * p_msg);
 
 /* nfc_hal_nci.c */
-BOOLEAN nfc_hal_nci_receive_msg (UINT8 byte);
+BOOLEAN nfc_hal_nci_receive_msg (void);
 BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg);
 NFC_HDR* nfc_hal_nci_postproc_rx_nci_msg (void);
 void    nfc_hal_nci_assemble_nci_msg (void);
 void    nfc_hal_nci_add_nfc_pkt_type (NFC_HDR *p_msg);
 void    nfc_hal_nci_send_cmd (NFC_HDR *p_buf);
 void    nfc_hal_nci_cmd_timeout_cback (void *p_tle);
-
+void    nfc_hal_dm_send_prop_sleep_cmd (void);
+int     nfc_hal_dm_get_nfc_sleep_state (void);
 /* nfc_hal_dm.c */
 void nfc_hal_dm_init (void);
 void nfc_hal_dm_set_xtal_freq_index (void);
@@ -475,6 +521,8 @@ tHAL_NFC_STATUS nfc_hal_dm_set_config (UINT8 tlv_size, UINT8 *p_param_tlvs, tNFC
 void nfc_hal_prm_spd_reset_ntf (UINT8 reset_reason, UINT8 reset_type);
 void nfc_hal_prm_nci_command_complete_cback (tNFC_HAL_NCI_EVT event, UINT16 data_len, UINT8 *p_data);
 void nfc_hal_prm_process_timeout (void *p_tle);
+int nfc_hal_dm_check_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen);
+void nfc_hal_dm_frame_mem_access_cmd(UINT8 *nvmpokecmd,UINT8 *nvmupdatebuff,UINT8 *nvmpokecmdlen);
 
 /* nfc_hal_hci.c */
 void nfc_hal_hci_enable (void);
