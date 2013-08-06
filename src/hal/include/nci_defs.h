@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2013 Broadcom Corporation
  *
@@ -233,6 +237,13 @@ typedef UINT8 tNCI_STATUS;
 /**********************************************
  * NCI Proprietary  Group       - F
  **********************************************/
+/**********************************************
+ * Proprietary Group Opcode    - 1
+ **********************************************/
+#define NCI_MSG_PROP_MEMACCESS          00
+#define NCI_MSG_PROP_GENERIC            01
+#define NCI_MSG_PROP_ROMINFO            02
+#define NCI_MSG_PROP_SLEEP              03
 
 /**********************************************
  * NCI Core Group Params
