@@ -27,4 +27,5 @@ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
-1. jbmr2(AU_LINUX_ANDROID_JB_3.2.04.02.02.112.042)code merge from jbmr1
+1. jbmr2(AU_LINUX_ANDROID_JB_3.2_RB2.04.03.00.129.005)code merge from jbmr1
+2. NVM crash issue. temp. direct ee workaround.
