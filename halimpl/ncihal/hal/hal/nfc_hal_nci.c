@@ -601,9 +601,11 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                             *p = nfc_hal_cb.max_rf_credits;
                         }
                     }
-                nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
+                    if((*(p + 1) != NCI_INTERFACE_EE_DIRECT_RF))
+                    {
+                        nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
+                    }
                 }
-
                 if (op_code == NCI_MSG_RF_DEACTIVATE)
                 {
                     if(nfc_hal_cb.act_interface == NCI_INTERFACE_NFC_DEP)

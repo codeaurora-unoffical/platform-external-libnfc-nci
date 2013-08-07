@@ -648,7 +648,8 @@ MORE_ENTRIES:
     /* check if further updates are there .means more than specified in file*/
     fgetc(nfc_hal_cb.nvm.p_Nvm_file); /*pass new line feed ch*/
     data_byte = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
-    if((data_byte== 32) || (data_byte== 16) || (data_byte== 8) || (data_byte== 2) || (data_byte== 1) || (data_byte== 0))
+    if((data_byte== 32) || (data_byte== 16) || (data_byte== 8) ||
+       (data_byte== 2) || (data_byte== 1) || (data_byte== 0))
     {
         /*check against the space in the end*/
         if((fgetc(nfc_hal_cb.nvm.p_Nvm_file) == 32) && (fgetc(nfc_hal_cb.nvm.p_Nvm_file)== '0'))
@@ -817,7 +818,7 @@ int nfc_hal_dm_check_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen)
                             for(; k > 0 ; k--)
                                 nvmupdatebuff[i++] = tmp_databuff[k-1];
                         }
-                        k= 0;
+                        k = 0;
                         /*check if all values are filled */
                         if(j == no_of_octets)
                             break;
@@ -834,16 +835,16 @@ int nfc_hal_dm_check_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen)
                         {
                             // no spcae given , discard only x.0 discarded already.
                             fgetc(nfc_hal_cb.nvm.p_Nvm_file);
-                            octet_cnt=0;
+                            octet_cnt = 0;
                         }
                     }
                 }
                 if(nvmupdatebuff[0] == 0x81)
                 {
-                    if((octet_cnt ==2) )
+                    if((octet_cnt == 2) )
                     {
                         /* fill data in little endian format in nvmupdatebuff*/
-                        if(k==2)
+                        if(k == 2)
                         {
                             for(; k > 0; k--)
                                 nvmupdatebuff[i++] = tmp_databuff[k-1];
@@ -871,7 +872,7 @@ int nfc_hal_dm_check_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen)
                 }
                 if(nvmupdatebuff[0] == 0x80)
                 {
-                    if((octet_cnt ==1) )
+                    if((octet_cnt == 1) )
                     {
                         /* fill data in little endian format in nvmupdatebuff*/
                         if(k == 1)
@@ -1168,45 +1169,45 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
             {
                 if (mt == NCI_MT_RSP)
                 {
-
                     if(nvm_update_flag == TRUE)
                     {
-                /*Check if NVM update file is available*/
-                if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates >0))
-                {
-                    /*nvm update file is present . Send update before patch data*/
-                    /* frame cmd now*/
-                    nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
-                    if(nvmcmd)
-                    {
-                        nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
-                    }
-                    else
-                    {
-                        /*mem allocation failed */
-                        return;
-                    }
-                    /* send nvm update cmd(NCI POKE) to NFCC*/
-                    nfc_hal_cb.nvm.no_of_updates--;
-                    nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
-                    free(nvmcmd);
-					nvmcmd = NULL;
-                    if(nfc_hal_cb.nvm.no_of_updates == 0)
-                    {
-                        /* All updates sent so close file now*/
-                        fclose(nfc_hal_cb.nvm.p_Nvm_file);
-                        nfc_hal_cb.nvm.p_Nvm_file = NULL;
-                        nfc_hal_cb.nvm.nvm_updated = TRUE;
-                    }
-                }
-                else
-                {
-                            /* Patch download seq going on.dynamic connection creation with NFCC for patch download*/
+                        /*Check if NVM update file is available*/
+                        if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates >0))
+                        {
+                            /*nvm update file is present . Send update before patch data*/
+                            /* frame cmd now*/
+                            nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
+                            if(nvmcmd)
+                            {
+                                nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
+                            }
+                            else
+                            {
+                                /*mem allocation failed */
+                                return;
+                            }
+                            /* send nvm update cmd(NCI POKE) to NFCC*/
+                            nfc_hal_cb.nvm.no_of_updates--;
+                            nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
+                            free(nvmcmd);
+                            nvmcmd = NULL;
+                            if(nfc_hal_cb.nvm.no_of_updates == 0)
+                            {
+                                /* All updates sent so close file now*/
+                                fclose(nfc_hal_cb.nvm.p_Nvm_file);
+                                nfc_hal_cb.nvm.p_Nvm_file = NULL;
+                                nfc_hal_cb.nvm.nvm_updated = TRUE;
+                            }
+                        }
+                        else
+                        {
+                            /* Patch download seq going on.dynamic connection
+                               creation with NFCC for patch download*/
                             HAL_TRACE_DEBUG0("PATCH Update : Sending Prop Cmd to check FW version");
                             NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
                             nfc_hal_cb.nvm.nvm_updated = FALSE;
                             nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_fwversion, 4, NULL);
-                       }
+                        }
                     }
                     else
                     {
@@ -1215,197 +1216,191 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                     NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
                     nfc_hal_cb.nvm.nvm_updated = FALSE;
                     nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_fwversion, 4, NULL);
-                }
-            }
-        }
-        else if(op_code == NCI_MSG_CORE_CONN_CREATE)
-        {
-           /* connection created so start sending patch data */
-           if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
-           {
-               HAL_TRACE_DEBUG0("PATCH Update : Sending Prepatch data");
-               pPatch_buff = (UINT8*)malloc((p[len-3]+NCI_MSG_HDR_SIZE));
-               pPatch_buff[0] = 0;
-               pPatch_buff[0] = (NCI_MT_DATA|0x10)|p[len-1];
-               pPatch_buff[1] = 0x00;
-               if(p[len-3]>0xFC)
-               {
-                   pPatch_buff[2] = 0xFC;
-               }
-               else
-               {
-                   pPatch_buff[2] = p[len-3];
-               }
-
-               // calculate number of buffers which will be sent
-               nfc_hal_cb.dev_cb.number_of_patch_data_buffers = (prepatchdatalen)% (pPatch_buff[2]);
-               if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0)
-               {
-                   if(!((prepatchdatalen)/(pPatch_buff[2])))
-                   {
-                      /*This is the case when patch data length will be less than 252*/
-                      len = nfc_hal_cb.dev_cb.number_of_patch_data_buffers;
-                   }
-                   else
-                   {
-                      len = pPatch_buff[2];
-                   }
-                   nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((prepatchdatalen)/(pPatch_buff[2])+1);
-               }
-               else
-               {
-                   nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((prepatchdatalen)/(pPatch_buff[2]));
-               }
-
-               HAL_TRACE_DEBUG2("PATCH Update : First packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
-               memcpy(pPatch_buff+3,patchdata,len);
-               nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
-               nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
-               nfc_hal_send_data(pPatch_buff,(len+NCI_MSG_HDR_SIZE),NULL);
-           }
-           else if(!nfc_hal_cb.dev_cb.patch_applied)
-           {
-               HAL_TRACE_DEBUG1("PATCH Update : Sending Patch data %d",nfc_hal_cb.dev_cb.pre_patch_file_available);
-               if(nfc_hal_cb.dev_cb.pre_patch_file_available == FALSE)
-               {
-                    HAL_TRACE_DEBUG0("PATCH Update : malloc");
-                   /* acquire memory only when memory has not been acquired for pre patch data send in case when it is not vailable*/
-                   pPatch_buff = (UINT8*)malloc((p[len-3]+NCI_MSG_HDR_SIZE));
-               }
-               pPatch_buff[0] = 0;
-               pPatch_buff[0] = (NCI_MT_DATA|0x10)|p[len-1];           // Data packet header with PBF 1 and Conn ID
-               pPatch_buff[1] = 0x00;
-               if(p[len-3]>0xFC)
-               {
-                   pPatch_buff[2] = 0xFC;
-               }
-               else
-               {
-                   pPatch_buff[2] = p[len-3];
-               }
-               // calculate number of buffers which will be sent
-               nfc_hal_cb.dev_cb.number_of_patch_data_buffers = (patchdatalen)% (pPatch_buff[2]);
-               if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0)
-               {
-                   if(!((patchdatalen)/(pPatch_buff[2])))
-                   {
-                      /*This is the case when patch data length will be less than 252*/
-                      len = nfc_hal_cb.dev_cb.number_of_patch_data_buffers;
-                   }
-                   else
-                   {
-                      len = pPatch_buff[2];
-                   }
-                   nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((patchdatalen)/(pPatch_buff[2])+1);
-               }
-               else
-               {
-                   nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((patchdatalen)/(pPatch_buff[2]));
-               }
-               HAL_TRACE_DEBUG2("PATCH Update : First packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
-               memcpy(pPatch_buff+3,patchdata,len);
-               nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
-               nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
-               nfc_hal_send_data(pPatch_buff,(len+NCI_MSG_HDR_SIZE),NULL);
-           }
-        }
-        else if(op_code == NCI_MSG_CORE_CONN_CREDITS)
-        {
-             // Patch data transfered
-             NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
-             nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
-             if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
-             {
-                 if((p[len-1] == 0x01 /*NFCC_Credits_Avail*/) && (nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0))
-                 {
-                     if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers >= 2)
-                     {
-                         memcpy(pPatch_buff+3,(prepatchdata+nfc_hal_cb.dev_cb.patch_data_offset),pPatch_buff[2]);
-                         nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
-                         nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
-                         nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
-                     }
-                     else
-                     {
-                         /*calculate last buffer length*/
-                         len = (prepatchdatalen)% (pPatch_buff[2]);
-                         *pPatch_buff &= 0x01;   //last packet
-                         *(pPatch_buff+2)= len;
-                         memcpy(pPatch_buff+3,(prepatchdata+nfc_hal_cb.dev_cb.patch_data_offset),len);
-
-                         HAL_TRACE_DEBUG2("PATCH Update : Last packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
-                         nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
-                         nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
-
-                         /* close connection now*/
-                         nfc_hal_cb.dev_cb.pre_patch_applied = FALSE;
-                         nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
-                         HAL_TRACE_DEBUG0("PATCH Update : Last packet sent.Close connection");
-                         nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_close_cmd, 4, NULL);
                     }
                 }
             }
-            else
+            else if(op_code == NCI_MSG_CORE_CONN_CREATE)
             {
-                /* Further patch data send*/
-                if((p[len-1] == 0x01 /*NFCC_Credits_Avail*/) && (nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0))
+                /* connection created so start sending patch data */
+                if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
                 {
-                    if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers >= 2)
+                    HAL_TRACE_DEBUG0("PATCH Update : Sending Prepatch data");
+                    pPatch_buff = (UINT8*)malloc((p[len-3]+NCI_MSG_HDR_SIZE));
+                    pPatch_buff[0] = 0;
+                    pPatch_buff[0] = (NCI_MT_DATA|0x10)|p[len-1];
+                    pPatch_buff[1] = 0x00;
+                    if(p[len-3]>0xFC)
                     {
-                        memcpy(pPatch_buff+3,(patchdata+nfc_hal_cb.dev_cb.patch_data_offset),pPatch_buff[2]);
-                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
-                        nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
-                        nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+                        pPatch_buff[2] = 0xFC;
                     }
                     else
                     {
-                        /*calculate last buffer length*/
-                        len = (patchdatalen)% (pPatch_buff[2]);
-                        *pPatch_buff &= 0x01;   //last packet
-                        *(pPatch_buff+2)= len ;
-                        memcpy(pPatch_buff+3,(patchdata+nfc_hal_cb.dev_cb.patch_data_offset),len);
-                        HAL_TRACE_DEBUG2("PATCH Update : Last packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
-                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
-                        nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+                        pPatch_buff[2] = p[len-3];
+                    }
+                    // calculate number of buffers which will be sent
+                    nfc_hal_cb.dev_cb.number_of_patch_data_buffers = (prepatchdatalen)% (pPatch_buff[2]);
+                    if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0)
+                    {
+                        if(!((prepatchdatalen)/(pPatch_buff[2])))
+                        {
+                            /*This is the case when patch data length will be less than 252*/
+                            len = nfc_hal_cb.dev_cb.number_of_patch_data_buffers;
+                        }
+                        else
+                        {
+                            len = pPatch_buff[2];
+                        }
+                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((prepatchdatalen)/(pPatch_buff[2])+1);
+                    }
+                    else
+                    {
+                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((prepatchdatalen)/(pPatch_buff[2]));
+                    }
 
-                        /* close connection now*/
-                        nfc_hal_cb.dev_cb.patch_applied = FALSE;
-                        HAL_TRACE_DEBUG0("PATCH Update : Last packet sent.Close connection");
-                        nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
-                        nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_close_cmd, 4, NULL);
+                    HAL_TRACE_DEBUG2("PATCH Update : First packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
+                    memcpy(pPatch_buff+3,patchdata,len);
+                    nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
+                    nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                    nfc_hal_send_data(pPatch_buff,(len+NCI_MSG_HDR_SIZE),NULL);
+                }
+                else if(!nfc_hal_cb.dev_cb.patch_applied)
+                {
+                    HAL_TRACE_DEBUG1("PATCH Update : Sending Patch data %d",nfc_hal_cb.dev_cb.pre_patch_file_available);
+                    if(nfc_hal_cb.dev_cb.pre_patch_file_available == FALSE)
+                    {
+                        HAL_TRACE_DEBUG0("PATCH Update : malloc");
+                        /* acquire memory only when memory has not been acquired for pre patch data send in case when it is not vailable*/
+                        pPatch_buff = (UINT8*)malloc((p[len-3]+NCI_MSG_HDR_SIZE));
+                    }
+                    pPatch_buff[0] = 0;
+                    pPatch_buff[0] = (NCI_MT_DATA|0x10)|p[len-1];           // Data packet header with PBF 1 and Conn ID
+                    pPatch_buff[1] = 0x00;
+                    if(p[len-3]>0xFC)
+                    {
+                        pPatch_buff[2] = 0xFC;
+                    }
+                    else
+                    {
+                        pPatch_buff[2] = p[len-3];
+                    }
+                    // calculate number of buffers which will be sent
+                    nfc_hal_cb.dev_cb.number_of_patch_data_buffers = (patchdatalen)% (pPatch_buff[2]);
+                    if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0)
+                    {
+                        if(!((patchdatalen)/(pPatch_buff[2])))
+                        {
+                            /*This is the case when patch data length will be less than 252*/
+                            len = nfc_hal_cb.dev_cb.number_of_patch_data_buffers;
+                        }
+                        else
+                        {
+                            len = pPatch_buff[2];
+                        }
+                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((patchdatalen)/(pPatch_buff[2])+1);
+                    }
+                    else
+                    {
+                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers = ((patchdatalen)/(pPatch_buff[2]));
+                    }
+                    HAL_TRACE_DEBUG2("PATCH Update : First packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
+                    memcpy(pPatch_buff+3,patchdata,len);
+                    nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
+                    nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                    nfc_hal_send_data(pPatch_buff,(len+NCI_MSG_HDR_SIZE),NULL);
+                }
+            }
+            else if(op_code == NCI_MSG_CORE_CONN_CREDITS)
+            {
+                // Patch data transfered
+                NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+                nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+                {
+                    if((p[len-1] == 0x01 /*NFCC_Credits_Avail*/) && (nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0))
+                    {
+                        if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers >= 2)
+                        {
+                            memcpy(pPatch_buff+3,(prepatchdata+nfc_hal_cb.dev_cb.patch_data_offset),pPatch_buff[2]);
+                            nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                            nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
+                            nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+                        }
+                        else
+                        {
+                            /*calculate last buffer length*/
+                            len = (prepatchdatalen)% (pPatch_buff[2]);
+                            *pPatch_buff &= 0x01;   //last packet
+                            *(pPatch_buff+2) = len;
+                            memcpy(pPatch_buff + 3, (prepatchdata+nfc_hal_cb.dev_cb.patch_data_offset), len);
+                            HAL_TRACE_DEBUG2("PATCH Update : Last packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
+                            nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                            nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+                            /* close connection now*/
+                            nfc_hal_cb.dev_cb.pre_patch_applied = FALSE;
+                            nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                            HAL_TRACE_DEBUG0("PATCH Update : Last packet sent.Close connection");
+                            nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_close_cmd, 4, NULL);
+                        }
+                    }
+                }
+                else
+                {
+                    /* Further patch data send*/
+                    if((p[len-1] == 0x01 /*NFCC_Credits_Avail*/) && (nfc_hal_cb.dev_cb.number_of_patch_data_buffers != 0))
+                    {
+                        if(nfc_hal_cb.dev_cb.number_of_patch_data_buffers >= 2)
+                        {
+                            memcpy(pPatch_buff+3,(patchdata+nfc_hal_cb.dev_cb.patch_data_offset),pPatch_buff[2]);
+                            nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                            nfc_hal_cb.dev_cb.patch_data_offset += pPatch_buff[2];
+                            nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+                        }
+                        else
+                        {
+                            /*calculate last buffer length*/
+                            len = (patchdatalen)% (pPatch_buff[2]);
+                            *pPatch_buff &= 0x01;   //last packet
+                            *(pPatch_buff+2)= len ;
+                            memcpy(pPatch_buff+3,(patchdata+nfc_hal_cb.dev_cb.patch_data_offset),len);
+                            HAL_TRACE_DEBUG2("PATCH Update : Last packet length is  %d and number of data packets are %d",len,nfc_hal_cb.dev_cb.number_of_patch_data_buffers);
+                            nfc_hal_cb.dev_cb.number_of_patch_data_buffers--;
+                            nfc_hal_send_data(pPatch_buff,(pPatch_buff[2]+NCI_MSG_HDR_SIZE),NULL);
+                            /* close connection now*/
+                            nfc_hal_cb.dev_cb.patch_applied = FALSE;
+                            HAL_TRACE_DEBUG0("PATCH Update : Last packet sent.Close connection");
+                            nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                            nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_close_cmd, 4, NULL);
+                        }
                     }
                 }
             }
+            else if(op_code == NCI_MSG_CORE_CONN_CLOSE)
+            {
+                if((!nfc_hal_cb.dev_cb.pre_patch_applied) ||(!nfc_hal_cb.dev_cb.patch_applied))
+                {
+                    if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+                    {
+                        HAL_TRACE_DEBUG0("PATCH Update : Pre patch data sending dynamic connection closed...Sending prop cmd to check pre patch signature again");
+                    }
+                    else
+                    {
+                        HAL_TRACE_DEBUG0("PATCH Update : Patch data sending dynamic connection closed...Sending prop cmd to check patch signature again");
+                    }
+                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+                    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
+                }
+            }
         }
-
-        else if(op_code == NCI_MSG_CORE_CONN_CLOSE)
+        else
         {
-             if((!nfc_hal_cb.dev_cb.pre_patch_applied) ||(!nfc_hal_cb.dev_cb.patch_applied))
-             {
-                 if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
-                 {
-                     HAL_TRACE_DEBUG0("PATCH Update : Pre patch data sending dynamic connection closed...Sending prop cmd to check pre patch signature again");
-                 }
-                 else
-                 {
-                     HAL_TRACE_DEBUG0("PATCH Update : Patch data sending dynamic connection closed...Sending prop cmd to check patch signature again");
-                 }
-
-                 NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
-                 nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
-             }
+            if (p_cback)
+            {
+                (*p_cback) ((tNFC_HAL_NCI_EVT) (op_code),
+                            p_msg->len,
+                            (UINT8 *) (p_msg + 1) + p_msg->offset);
+            }
         }
-         }
-         else
-         {
-             if (p_cback)
-             {
-                 (*p_cback) ((tNFC_HAL_NCI_EVT) (op_code),
-                             p_msg->len,
-                             (UINT8 *) (p_msg + 1) + p_msg->offset);
-             }
-         }
-     }
+    }
 
     if(patch_update_flag == TRUE)
     {
@@ -1413,211 +1408,205 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
         {
             if(nvm_update_flag)
             {
-         /* check if more nvm updates are to be sent */
-        if(nfc_hal_cb.nvm.no_of_updates >0)
-        {
-            if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates >0))
-            {
-                /* frame cmd now*/
-                nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
-                if(nvmcmd)
+                /* check if more nvm updates are to be sent */
+                if(nfc_hal_cb.nvm.no_of_updates > 0)
                 {
-                    nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
-                    /* send nvm update cmd(NCI POKE) to NFCC*/
-                    nfc_hal_cb.nvm.no_of_updates--;
-                    nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
-                    free(nvmcmd);
-					nvmcmd = NULL;
-                    if(nfc_hal_cb.nvm.no_of_updates == 0)
+                    if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates > 0))
                     {
-                        /* All updates sent so close file now*/
-                        fclose(nfc_hal_cb.nvm.p_Nvm_file);
-                        nfc_hal_cb.nvm.p_Nvm_file = NULL;
-                        nfc_hal_cb.nvm.nvm_updated = TRUE;
+                        /* frame cmd now*/
+                        nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
+                        if(nvmcmd)
+                        {
+                            nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
+                            /* send nvm update cmd(NCI POKE) to NFCC*/
+                            nfc_hal_cb.nvm.no_of_updates--;
+                            nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
+                            free(nvmcmd);
+                            nvmcmd = NULL;
+                            if(nfc_hal_cb.nvm.no_of_updates == 0)
+                            {
+                                /* All updates sent so close file now*/
+                                fclose(nfc_hal_cb.nvm.p_Nvm_file);
+                                nfc_hal_cb.nvm.p_Nvm_file = NULL;
+                                nfc_hal_cb.nvm.nvm_updated = TRUE;
+                            }
+                        }
+                        return;
                     }
                 }
+            }
+            if(nfc_hal_cb.nvm.nvm_updated == TRUE)
+            {
+                /* Patch download seq going on after nvm update.dynamic connection creation with NFCC for patch download*/
+                HAL_TRACE_DEBUG0("PATCH Update : Sending Prop Cmd to check patch signature");
+                NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+                nfc_hal_cb.nvm.nvm_updated = FALSE;
+                nfc_hal_cb.dev_cb.fw_version_chk = TRUE;
+                nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
                 return;
             }
-        }
-            }
-         if(nfc_hal_cb.nvm.nvm_updated == TRUE)
-         {
-             /* Patch download seq going on after nvm update.dynamic connection creation with NFCC for patch download*/
-             HAL_TRACE_DEBUG0("PATCH Update : Sending Prop Cmd to check patch signature");
-             NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
-             nfc_hal_cb.nvm.nvm_updated = FALSE;
-             nfc_hal_cb.dev_cb.fw_version_chk = TRUE;
-             nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
-             return;
-         }
 
-        if(!nfc_hal_cb.dev_cb.patch_applied)
-        {
-            if(nfc_hal_cb.dev_cb.fw_version_chk)
+            if(!nfc_hal_cb.dev_cb.patch_applied)
             {
-                if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+                if(nfc_hal_cb.dev_cb.fw_version_chk)
                 {
-                    HAL_TRACE_DEBUG0("PATCH Update : Checking Prepatch Signature");
-                    patch_update = nfc_hal_check_signature_fw_ver_2(p,len,prepatchdata,prepatchdatalen);
-                    nfc_hal_cb.dev_cb.pre_patch_signature_chk = TRUE;
-                }
-                else
-                {
-                    /*Pre patch applied .Now checking patch signature*/
-                    HAL_TRACE_DEBUG0("PATCH Update : Checking patch Signature");
-                    patch_update = nfc_hal_check_signature_fw_ver_2(p,len,patchdata,patchdatalen);
-                    nfc_hal_cb.dev_cb.patch_signature_chk = TRUE;
-                }
-                if(patch_update == PATCH_NOT_UPDATED)
-                {
-                    /*create a dynamic logical connection with the NFCC to update the pre patch*/
-                    if(nfc_hal_cb.dev_cb.pre_patch_file_available)
+                    if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
                     {
-                        HAL_TRACE_DEBUG0("PATCH Update : Prepatch file signature different..Create dynamic connection to update prepatch");
+                        HAL_TRACE_DEBUG0("PATCH Update : Checking Prepatch Signature");
+                        patch_update = nfc_hal_check_signature_fw_ver_2(p,len,prepatchdata,prepatchdatalen);
+                        nfc_hal_cb.dev_cb.pre_patch_signature_chk = TRUE;
                     }
                     else
                     {
-                        HAL_TRACE_DEBUG0("PATCH Update : Patch file signature different..Create dynamic connection to update patch");
+                        /*Pre patch applied .Now checking patch signature*/
+                        HAL_TRACE_DEBUG0("PATCH Update : Checking patch Signature");
+                        patch_update = nfc_hal_check_signature_fw_ver_2(p,len,patchdata,patchdatalen);
+                        nfc_hal_cb.dev_cb.patch_signature_chk = TRUE;
                     }
-                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_FOR_PATCH_DNLD);
-                    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_create_cmd, 8, NULL);
-                }
-                else
-                {
-                    /* prepatch applied successfully .open connection to apply patch mow */
-                    if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+                    if(patch_update == PATCH_NOT_UPDATED)
                     {
-                        HAL_TRACE_DEBUG0("PATCH Update : Prepatch applied successfully..Create dynamic connection to update patch");
-                        nfc_hal_cb.dev_cb.pre_patch_applied = TRUE;
-                        nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
-                        nfc_hal_cb.dev_cb.patch_data_offset = 0;
+                        /*create a dynamic logical connection with the NFCC to update the pre patch*/
+                        if(nfc_hal_cb.dev_cb.pre_patch_file_available)
+                        {
+                            HAL_TRACE_DEBUG0("PATCH Update : Prepatch file signature different..Create dynamic connection to update prepatch");
+                        }
+                        else
+                        {
+                            HAL_TRACE_DEBUG0("PATCH Update : Patch file signature different..Create dynamic connection to update patch");
+                        }
                         NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_FOR_PATCH_DNLD);
                         nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_create_cmd, 8, NULL);
                     }
                     else
                     {
-                        HAL_TRACE_DEBUG0("PATCH Update : Patch applied successfully..Pre Init Done");
+                        /* prepatch applied successfully .open connection to apply patch mow */
+                        if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
+                        {
+                            HAL_TRACE_DEBUG0("PATCH Update : Prepatch applied successfully..Create dynamic connection to update patch");
+                            nfc_hal_cb.dev_cb.pre_patch_applied = TRUE;
+                            nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
+                            nfc_hal_cb.dev_cb.patch_data_offset = 0;
+                            NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_FOR_PATCH_DNLD);
+                            nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_con_create_cmd, 8, NULL);
+                        }
+                        else
+                        {
+                            HAL_TRACE_DEBUG0("PATCH Update : Patch applied successfully..Pre Init Done");
+                            nfc_hal_cb.dev_cb.patch_applied = FALSE;
+                            nfc_hal_cb.dev_cb.pre_init_done = TRUE;
+                            nfc_hal_cb.dev_cb.pre_patch_signature_chk = FALSE;
+                            nfc_hal_cb.dev_cb.patch_signature_chk = FALSE;
+                            nfc_hal_cb.dev_cb.patch_data_offset = 0;
+                            nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
+                            if ( pPatch_buff != NULL)
+                            {
+                                free(pPatch_buff);
+                                pPatch_buff = NULL;
+                            }
+                            if ( prepatchdata != NULL)
+                            {
+                                free(prepatchdata);
+                                prepatchdata = NULL;
+                            }
+                            if ( patchdata != NULL)
+                            {
+                                free(patchdata);
+                                patchdata = NULL;
+                            }
+                            prepatchdatalen = 0;
+                            patchdatalen = 0;
+                            NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
+                            HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
+                        }
+                    }
+                }
+                if(!nfc_hal_cb.dev_cb.fw_version_chk)
+                {
+                    HAL_TRACE_DEBUG0("PATCH Update : Checking FW Version");
+                    patch_update = nfc_hal_check_firmware_version(p,len,patchdata,patchdatalen);
+                    if(patch_update)
+                    {
+                        /*Now send again the prop command to enquire about the patch info from NFCC*/
+                        HAL_TRACE_DEBUG0("PATCH Update : FW Version matched..Sending prop cmd again to verify signature");
+                        nfc_hal_cb.dev_cb.fw_version_chk = TRUE;
+                        patch_update = FALSE;          /*Reset flag for further signature test*/
+                        NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+                        nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
+                    }
+                    else
+                    {
+                        /*FW version is different from th NFCC.Wrong file.Discard it and continue with normal initialization*/
+                        HAL_TRACE_DEBUG0("PATCH Update : FW Version not matched..Start normal initialization");
+                        nfc_hal_cb.dev_cb.pre_patch_applied = FALSE;
                         nfc_hal_cb.dev_cb.patch_applied = FALSE;
                         nfc_hal_cb.dev_cb.pre_init_done = TRUE;
                         nfc_hal_cb.dev_cb.pre_patch_signature_chk = FALSE;
                         nfc_hal_cb.dev_cb.patch_signature_chk = FALSE;
                         nfc_hal_cb.dev_cb.patch_data_offset = 0;
                         nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
-						if ( pPatch_buff != NULL)
-						{
-							free(pPatch_buff);
-							pPatch_buff = NULL;
-						}
-						if ( prepatchdata != NULL)
-						{
-							free(prepatchdata);
-							prepatchdata = NULL;
-						}
-						if ( patchdata != NULL)
-						{
-							free(patchdata);
-							patchdata = NULL;
-						}
+                        if (pPatch_buff != NULL)
+                        {
+                            free(pPatch_buff);
+                            pPatch_buff = NULL;
+                        }
+                        if (prepatchdata != NULL)
+                        {
+                            free(prepatchdata);
+                            prepatchdata = NULL;
+                        }
+                        if (patchdata != NULL)
+                        {
+                            free(patchdata);
+                            patchdata = NULL;
+                        }
                         prepatchdatalen = 0;
                         patchdatalen = 0;
                         NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
                         HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
                     }
                 }
-            }
-            if(!nfc_hal_cb.dev_cb.fw_version_chk)
-            {
-                HAL_TRACE_DEBUG0("PATCH Update : Checking FW Version");
-                patch_update = nfc_hal_check_firmware_version(p,len,patchdata,patchdatalen);
-                if(patch_update)
+                if(nfc_hal_cb.dev_cb.pre_init_done == TRUE)
                 {
-                    /*Now send again the prop command to enquire about the patch info from NFCC*/
-                    HAL_TRACE_DEBUG0("PATCH Update : FW Version matched..Sending prop cmd again to verify signature");
-                    nfc_hal_cb.dev_cb.fw_version_chk = TRUE;
-                    patch_update = FALSE;          /*Reset flag for further signature test*/
-                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
-                    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
-                }
-                else
-                {
-                    /*FW version is different from th NFCC.Wrong file.Discard it and continue with normal initialization*/
-                    HAL_TRACE_DEBUG0("PATCH Update : FW Version not matched..Start normal initialization");
-                    nfc_hal_cb.dev_cb.pre_patch_applied = FALSE;
-                    nfc_hal_cb.dev_cb.patch_applied = FALSE;
-                    nfc_hal_cb.dev_cb.pre_init_done = TRUE;
-                    nfc_hal_cb.dev_cb.pre_patch_signature_chk = FALSE;
-                    nfc_hal_cb.dev_cb.patch_signature_chk = FALSE;
-                    nfc_hal_cb.dev_cb.patch_data_offset = 0;
-                    nfc_hal_cb.dev_cb.number_of_patch_data_buffers = 0;
-					if (pPatch_buff != NULL)
-					{
-						free(pPatch_buff);
-						pPatch_buff = NULL;
-					}
-					if (prepatchdata != NULL)
-					{
-						free(prepatchdata);
-						prepatchdata = NULL;
-					}
-					if (patchdata != NULL)
-					{
-						free(patchdata);
-						patchdata = NULL;
-					}
-                    prepatchdatalen = 0;
-                    patchdatalen = 0;
-                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
-                    HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
+                    nfc_hal_cb.dev_cb.fw_version_chk = FALSE;
                 }
             }
-            if(nfc_hal_cb.dev_cb.pre_init_done == TRUE)
-            {
-                nfc_hal_cb.dev_cb.fw_version_chk = FALSE;
-            }
-        }
         }
     }
 
-        if (mt == NCI_MT_NTF)
-            op_code |= NCI_NTF_BIT;
-        else
-            op_code |= NCI_RSP_BIT;
+    if (mt == NCI_MT_NTF)
+        op_code |= NCI_NTF_BIT;
+    else
+        op_code |= NCI_RSP_BIT;
 
-        if (  (op_code == NFC_VS_GET_BUILD_INFO_EVT)
-                 &&(nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_BUILD_INFO)  )
-        {
-            p += NCI_BUILD_INFO_OFFSET_HWID;
-
-            STREAM_TO_UINT32 (nfc_hal_cb.dev_cb.m_hw_id, p);
-
-            NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
-
-            nfc_hal_dm_send_nci_cmd (nfc_hal_dm_get_patch_version_cmd, NCI_MSG_HDR_SIZE, NULL);
-        }
-        else if (  (op_code == NFC_VS_GET_PATCH_VERSION_EVT)
-                 &&(nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_PATCH_INFO)  )
-        {
-            p += NCI_PATCH_INFO_OFFSET_NVMTYPE;
-
-            NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
-
-            nfc_hal_post_reset_init (nfc_hal_cb.dev_cb.m_hw_id, *p);
-        }
-        else if (p_cback)
-        {
-            (*p_cback) ((tNFC_HAL_NCI_EVT) (op_code),
-                        p_msg->len,
-                        (UINT8 *) (p_msg + 1) + p_msg->offset);
-        }
-        else if (op_code == NFC_VS_SEC_PATCH_AUTH_EVT)
-        {
-            HAL_TRACE_DEBUG0 ("signature!!");
-            nfc_hal_prm_nci_command_complete_cback ((tNFC_HAL_NCI_EVT) (op_code),
-                                                    p_msg->len,
-                                                    (UINT8 *) (p_msg + 1) + p_msg->offset);
-        }
+    if (  (op_code == NFC_VS_GET_BUILD_INFO_EVT)
+          &&(nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_BUILD_INFO)  )
+    {
+        p += NCI_BUILD_INFO_OFFSET_HWID;
+        STREAM_TO_UINT32 (nfc_hal_cb.dev_cb.m_hw_id, p);
+        NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
+        nfc_hal_dm_send_nci_cmd (nfc_hal_dm_get_patch_version_cmd, NCI_MSG_HDR_SIZE, NULL);
+    }
+    else if (  (op_code == NFC_VS_GET_PATCH_VERSION_EVT)
+               &&(nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_PATCH_INFO)  )
+    {
+        p += NCI_PATCH_INFO_OFFSET_NVMTYPE;
+        NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
+        nfc_hal_post_reset_init (nfc_hal_cb.dev_cb.m_hw_id, *p);
+    }
+    else if (p_cback)
+    {
+        (*p_cback) ((tNFC_HAL_NCI_EVT) (op_code),
+                    p_msg->len,
+                    (UINT8 *) (p_msg + 1) + p_msg->offset);
+    }
+    else if (op_code == NFC_VS_SEC_PATCH_AUTH_EVT)
+    {
+        HAL_TRACE_DEBUG0 ("signature!!");
+        nfc_hal_prm_nci_command_complete_cback ((tNFC_HAL_NCI_EVT) (op_code),
+                                                p_msg->len,
+                                                (UINT8 *) (p_msg + 1) + p_msg->offset);
+    }
 }
-
 /*******************************************************************************
 **
 ** Function         nfc_hal_dm_send_nci_cmd
@@ -1667,7 +1656,6 @@ void nfc_hal_dm_send_nci_cmd (const UINT8 *p_data, UINT16 len, tNFC_HAL_NCI_CBAC
                                         ((UINT32) NFC_HAL_CMD_TOUT) * QUICK_TIMER_TICKS_PER_SEC / 1000);
     }
 }
-
 /*******************************************************************************
 **
 ** Function         nfc_hal_dm_send_pend_cmd
