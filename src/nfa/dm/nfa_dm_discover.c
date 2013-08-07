@@ -409,6 +409,9 @@ static void nfa_dm_set_qnci_params (void)
 {
     UINT8 params[200], *p;
     UINT8 lf_a_identifier[2][7];
+    UINT8 lf_t3t_identifier[NFA_LF_MAX_SC_NFCID2][NCI_SYSTEMCODE_LEN + NCI_NFCID2_LEN];
+    UINT32 nfcf_listenmask = 0;
+
     NFA_TRACE_DEBUG0 ("nfa_dm_set_nci_params ()");
 
     p = params;
@@ -421,22 +424,59 @@ static void nfa_dm_set_qnci_params (void)
     UINT8_TO_STREAM (p, 0x01);
     UINT8_TO_STREAM (p, 0x01);
 
-    UINT8_TO_STREAM (p, NCI_PARAM_ID_LF_PROTOCOL);
+    UINT8_TO_STREAM (p, NFC_PMID_NFC_DEP_OP);
     UINT8_TO_STREAM (p, 0x01);
-    UINT8_TO_STREAM (p, 0x02);
+    UINT8_TO_STREAM (p, 0x0F);
 
-    lf_a_identifier[0][0] = 0x40;
-    lf_a_identifier[0][1] = 0x00;
-    lf_a_identifier[0][2] = 0x00;
-    lf_a_identifier[0][3] = 0x00;
-    lf_a_identifier[0][4] = 0x00;
-    lf_a_identifier[0][5] = 0x01;
-    lf_a_identifier[0][6] = 0x10;
+    GetNumValue("NFCF_PROTOCOL_MASK", &nfcf_listenmask, sizeof(nfcf_listenmask));
 
+    NFA_TRACE_DEBUG1 ("nfcf_listenmask : %d",nfcf_listenmask);
 
-    UINT8_TO_STREAM (p, NFC_PMID_LA_NFCID1);
-    UINT8_TO_STREAM (p, 0x7);
-    ARRAY_TO_STREAM (p, lf_a_identifier[0], 0x7);
+    if (nfcf_listenmask == 0x01 /*NFC_F T3T*/)
+    {
+        NFA_TRACE_DEBUG0 ("Setting NFC_F T3T listen params");
+        UINT8_TO_STREAM (p, NCI_PARAM_ID_LF_PROTOCOL);
+        UINT8_TO_STREAM (p, 0x01);
+        UINT8_TO_STREAM (p, 0x00);
+
+        UINT8_TO_STREAM (p, NCI_PARAM_ID_LF_T3T_FLAGS2);
+        UINT8_TO_STREAM (p, 0x02);
+        UINT16_TO_STREAM(p,0x0100);
+
+        lf_t3t_identifier[0][0] = 0x12;
+        lf_t3t_identifier[0][1] = 0xFC;
+        lf_t3t_identifier[0][2] = 0x02;
+        lf_t3t_identifier[0][3] = 0xFE;
+        lf_t3t_identifier[0][4] = 0x03;
+        lf_t3t_identifier[0][5] = 0x04;
+        lf_t3t_identifier[0][6] = 0x05;
+        lf_t3t_identifier[0][7] = 0x06;
+        lf_t3t_identifier[0][8] = 0x07;
+        lf_t3t_identifier[0][9] = 0x08;
+
+        UINT8_TO_STREAM (p, NFC_PMID_LF_T3T_ID1);
+        UINT8_TO_STREAM (p, NCI_SYSTEMCODE_LEN + NCI_NFCID2_LEN);
+        ARRAY_TO_STREAM (p, lf_t3t_identifier[0], NCI_SYSTEMCODE_LEN + NCI_NFCID2_LEN);
+    }
+    else
+    {
+        NFA_TRACE_DEBUG0 ("Setting NFC_F NFCDEP listen params");
+        UINT8_TO_STREAM (p, NCI_PARAM_ID_LF_PROTOCOL);
+        UINT8_TO_STREAM (p, 0x01);
+        UINT8_TO_STREAM (p, 0x02);
+
+        lf_a_identifier[0][0] = 0x40;
+        lf_a_identifier[0][1] = 0x00;
+        lf_a_identifier[0][2] = 0x00;
+        lf_a_identifier[0][3] = 0x00;
+        lf_a_identifier[0][4] = 0x00;
+        lf_a_identifier[0][5] = 0x01;
+        lf_a_identifier[0][6] = 0x10;
+
+        UINT8_TO_STREAM (p, NFC_PMID_LA_NFCID1);
+        UINT8_TO_STREAM (p, 0x7);
+        ARRAY_TO_STREAM (p, lf_a_identifier[0], 0x7);
+    }
 
     if (p > params)
     {
@@ -1925,10 +1965,12 @@ static void nfa_dm_disc_sm_discovery (tNFA_DM_RF_DISC_SM_EVENT event,
             if (nfa_dm_disc_notify_activation (&(p_data->nfc_discover)) == NFA_STATUS_FAILED)
             {
                 NFA_TRACE_DEBUG0 ("Not matched, restart discovery after receiving deactivate ntf");
-
-                /* after receiving deactivate event, restart discovery */
-                nfa_dm_cb.disc_cb.disc_flags |= (NFA_DM_DISC_FLAGS_W4_RSP|NFA_DM_DISC_FLAGS_W4_NTF);
-                NFC_Deactivate (NFA_DEACTIVATE_TYPE_IDLE);
+                if (p_data->nfc_discover.activate.intf_param.type != NFC_INTERFACE_EE_DIRECT_RF)
+                {
+                    /* after receiving deactivate event, restart discovery */
+                    nfa_dm_cb.disc_cb.disc_flags |= (NFA_DM_DISC_FLAGS_W4_RSP|NFA_DM_DISC_FLAGS_W4_NTF);
+                    NFC_Deactivate (NFA_DEACTIVATE_TYPE_IDLE);
+                }
             }
         }
         break;

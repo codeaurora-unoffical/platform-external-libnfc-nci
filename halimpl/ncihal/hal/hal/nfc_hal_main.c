@@ -660,8 +660,7 @@ UINT32 nfc_hal_main_task (UINT32 param)
                     break;
 
                 case NFC_HAL_EVT_POST_CORE_RESET:
-                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_POST_INIT_DONE);
-
+                    NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_IDLE);
                     /* set NCI Control packet size from CORE_INIT_RSP */
                     p = (UINT8 *) (p_msg + 1) + p_msg->offset + NCI_MSG_HDR_SIZE;
                     p += 5;
