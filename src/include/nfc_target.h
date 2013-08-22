@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -34,6 +38,7 @@
 #include "bt_trace.h"
 #endif
 
+#define ANDROID_MODE 0
 
 /* API macros for DLL (needed to export API functions from DLLs) */
 #define NFC_API         EXPORT_API
@@ -232,7 +237,7 @@
 
 /* the maximum number of NFCEE interface supported */
 #ifndef NFC_MAX_EE_INTERFACE
-#define NFC_MAX_EE_INTERFACE        3
+#define NFC_MAX_EE_INTERFACE        4
 #endif
 
 /* the maximum number of NFCEE information supported. */
@@ -423,7 +428,7 @@
 
 /* Response Waiting Time */
 #ifndef LLCP_WAITING_TIME
-#define LLCP_WAITING_TIME           7       /* its scaled value should be less than LTO */
+#define LLCP_WAITING_TIME           8       /* its scaled value should be less than LTO */
 #endif
 
 /* Options Parameters */
@@ -647,7 +652,7 @@
 
 /* Max number of NFCEE supported */
 #ifndef NFA_EE_MAX_EE_SUPPORTED
-#define NFA_EE_MAX_EE_SUPPORTED         3
+#define NFA_EE_MAX_EE_SUPPORTED         4
 #endif
 
 /* Maximum number of AID entries per target_handle  */
@@ -657,7 +662,7 @@
 
 /* Maximum number of callback functions can be registered through NFA_EeRegister() */
 #ifndef NFA_EE_MAX_CBACKS
-#define NFA_EE_MAX_CBACKS           (3)
+#define NFA_EE_MAX_CBACKS           (4)
 #endif
 
 #ifndef NFA_DTA_INCLUDED
