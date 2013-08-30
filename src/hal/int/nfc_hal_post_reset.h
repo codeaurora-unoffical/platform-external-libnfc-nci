@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2009-2013 Broadcom Corporation
  *
@@ -69,6 +73,44 @@ extern tNFC_POST_RESET_CB nfc_post_reset_cb;
 ** When pre-initialization is completed,
 ** HAL_NfcPreInitDone() must be called to proceed with stack start up.
 */
-void nfc_hal_post_reset_init (UINT32 brcm_hw_id, UINT8 nvm_type);
+void nfc_hal_post_reset_init (UINT32 m_hw_id, UINT8 nvm_type);
+/*
+** NFC hal read patch function
+**
+** This function is called to read the patch file information to update
+** the patch if patch update is enabled (after first  NCI CORE-RESET)
+** After patch data read it will be verified against ECDSA signature
+** for aunthencity and further updation
+*/
+int nfc_hal_patch_read(const char* pPatchFilePath,UINT8 **patchdata,UINT32 *patchdatalength);
+/*
+** NFC hal read validate function
+** This function is called to validate prepatch and patch file.It checks if
+** the prepatch file and patch file are compatible for each other and meant
+** for each other. It also stores the prepatch sig and patch sig for further
+** checks.
+*/
+int nfc_hal_patch_validate(UINT8 *patchdata,UINT32 patchdatalength,UINT8 *prepatchdata,UINT32 prepatchdatalength);
+/*
+** NFC hal check firmware version function
+** This function is called to validate if the prepatch file is suitable for
+** currently running firmware on NFCC or not .
+*/
+UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT8 patchdatalen);
+/*
+** NFC hal check patch signature function
+** This function is called to validate if the patch applied successfully or
+** not.
+*/
+//UINT8 nfc_hal_check_patch_signature(UINT8 *genproprsp,UINT8 resplen);
+UINT8 nfc_hal_check_signature_fw_ver_2(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT32 patchdatalen);
+UINT8 nfc_hal_check_patch_signature(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT32 patchdatalen);
+/*
+** NFC hal check prepatch signature function
+** This function is called to validate if the recently recieved prepatch
+** is relevant to be applied on currently running firmware patch.Later it
+** is also used to validate if the prepatch applied successfully or not.
+*/
+UINT8 nfc_hal_check_prepatch_signature(UINT8 *genproprsp,UINT8 resplen);
 
 #endif  /* NFC_HAL_POST_RESET_H */
