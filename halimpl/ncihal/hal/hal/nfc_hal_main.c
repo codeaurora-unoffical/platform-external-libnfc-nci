@@ -37,6 +37,7 @@
 #include <DT_Nfc_i2c.h>
 #include <DT_Nfc_log.h>
 #include <DT_Nfc.h>
+#include <time.h>
 /****************************************************************************
 ** Definitions
 ****************************************************************************/
@@ -57,6 +58,8 @@ tNFC_HAL_CB nfc_hal_cb;
 #endif
 
 extern tNFC_HAL_CFG *p_nfc_hal_cfg;
+/*semaphore to keep track the sleep response before shutdown*/
+sem_t semaphore_sleepcmd_complete;
 /****************************************************************************
 ** Internal function prototypes
 ****************************************************************************/
@@ -596,7 +599,8 @@ UINT32 nfc_hal_main_task (UINT32 param)
     UINT8    *p;
     NFC_HDR  *p_msg;
     BOOLEAN  free_msg;
-
+    struct timespec time_sec;
+    UINT16 sem_status;
     HAL_TRACE_DEBUG0 ("NFC_HAL_TASK started");
 
     gDrvCfg.nRef    = 0;
@@ -619,7 +623,33 @@ UINT32 nfc_hal_main_task (UINT32 param)
         if (event & NFC_HAL_TASK_EVT_TERMINATE)
         {
             HAL_TRACE_DEBUG0 ("NFC_HAL_TASK got NFC_HAL_TASK_EVT_TERMINATE");
+            if(nfc_hal_cb.init_sleep_done)
+            {
+                HAL_TRACE_DEBUG0("initializing sem for sleep cmd completeion before shutdown \n");
+                /*this semaphore is used to keep track of the sleep rsp before closing the transport*/
+                if(sem_init(&semaphore_sleepcmd_complete, 0, 0) != 0)
+                {
+                    HAL_TRACE_DEBUG0("semaphore_sleepcmd_complete creation failed \n");
+                }
+            }
             nfc_hal_main_handle_terminate ();
+            if(nfc_hal_cb.init_sleep_done)
+            {
+                if (clock_gettime(CLOCK_REALTIME, &time_sec) == -1)
+                {
+                    HAL_TRACE_DEBUG0("get clock_gettime error");
+                }
+                time_sec.tv_sec += 1;
+                HAL_TRACE_DEBUG0("waiting for semaphore_sleepcmd_complete \n");
+                nfc_hal_cb.wait_sleep_rsp = 1;
+                sem_status = sem_timedwait(&semaphore_sleepcmd_complete,&time_sec);
+                if(sem_status == -1)
+                {
+                    HAL_TRACE_DEBUG0("sleep command timed out\n");
+                }
+                nfc_hal_cb.init_sleep_done = 0;
+                sem_destroy(&semaphore_sleepcmd_complete);
+            }
             DT_Nfc_Close(&gDrvCfg);
             if (nfc_hal_cb.p_stack_cback)
             {
