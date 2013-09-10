@@ -408,7 +408,6 @@ static tNFA_STATUS nfa_dm_set_rf_listen_mode_config (tNFA_DM_DISC_TECH_PROTO_MAS
 static void nfa_dm_set_qnci_params (void)
 {
     UINT8 params[200], *p;
-    UINT8 lf_a_identifier[2][7];
     UINT8 lf_t3t_identifier[NFA_LF_MAX_SC_NFCID2][NCI_SYSTEMCODE_LEN + NCI_NFCID2_LEN];
     UINT32 nfcf_listenmask = 0;
 
@@ -464,18 +463,6 @@ static void nfa_dm_set_qnci_params (void)
         UINT8_TO_STREAM (p, NCI_PARAM_ID_LF_PROTOCOL);
         UINT8_TO_STREAM (p, 0x01);
         UINT8_TO_STREAM (p, 0x02);
-
-        lf_a_identifier[0][0] = 0x40;
-        lf_a_identifier[0][1] = 0x00;
-        lf_a_identifier[0][2] = 0x00;
-        lf_a_identifier[0][3] = 0x00;
-        lf_a_identifier[0][4] = 0x00;
-        lf_a_identifier[0][5] = 0x01;
-        lf_a_identifier[0][6] = 0x10;
-
-        UINT8_TO_STREAM (p, NFC_PMID_LA_NFCID1);
-        UINT8_TO_STREAM (p, 0x7);
-        ARRAY_TO_STREAM (p, lf_a_identifier[0], 0x7);
     }
 
     if (p > params)
