@@ -36,7 +36,7 @@
 #include "nfc_brcm_defs.h"
 #include "nfc_hal_api.h"
 #include "nfc_hal_int_api.h"
-
+#include <semaphore.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -423,7 +423,8 @@ typedef struct
     UINT32                   number_of_patch_data_buffers;
     UINT8                    pre_patch_file_available;       /* This flag will be set if pre patch file is available*/
     UINT8                    patch_file_available;           /* This flag will be set if patch file is available*/
-
+    UINT8                    patch_dnld_conn_close_delay;    /* This flag will enable 4 sec or configured delay for the conn close after
+                                                                patch is downloaded*/
 } tNFC_HAL_DEV_CB;
 
 /* data members for NFC_HAL-HCI */
@@ -466,6 +467,8 @@ typedef struct
     tNFC_HAL_NVM_CB         nvm;                /* NVM update CB(control block)*/
 
     UINT8                   propd_sleep;
+    UINT8                   init_sleep_done;    /* flag to keep track initialization time sleep*/
+    UINT8                   wait_sleep_rsp;
     UINT8                   listen_setConfig_rsp_cnt;
     UINT8                   act_interface;
 
@@ -491,7 +494,7 @@ void   nfc_hal_main_start_quick_timer (TIMER_LIST_ENT *p_tle, UINT16 type, UINT3
 void   nfc_hal_main_stop_quick_timer (TIMER_LIST_ENT *p_tle);
 void   nfc_hal_main_send_error (tHAL_NFC_STATUS status);
 void   nfc_hal_send_nci_msg_to_nfc_task (NFC_HDR * p_msg);
-
+void   check_patch_version(UINT32 *version);
 /* nfc_hal_nci.c */
 BOOLEAN nfc_hal_nci_receive_msg (void);
 BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg);
