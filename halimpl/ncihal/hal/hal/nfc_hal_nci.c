@@ -645,7 +645,6 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                     else
                     {
                         if((*(p) == NCI_DEACTIVATE_TYPE_DISCOVERY) &&
-                           (*(p+1) == NCI_DEACTIVATE_REASON_RF_LINK_LOSS) &&
                             ( nfc_hal_cb.act_interface != NCI_INTERFACE_EE_DIRECT_RF)
                              )
                         {
