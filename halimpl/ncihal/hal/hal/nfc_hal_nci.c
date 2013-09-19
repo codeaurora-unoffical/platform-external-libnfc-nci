@@ -604,6 +604,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                 if (op_code == NCI_MSG_RF_INTF_ACTIVATED)
                 {
                     nfc_hal_cb.act_interface = NCI_INTERFACE_MAX + 1;
+                    nfc_hal_cb.listen_mode_activated = FALSE;
                     /*check which interface is activated*/
                     if((*(p+1) == NCI_INTERFACE_NFC_DEP))
                     {
@@ -616,6 +617,14 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                             nfc_hal_cb.act_interface = NCI_INTERFACE_NFC_DEP;
                             nfc_hal_cb.listen_setConfig_rsp_cnt = 0;
                         }
+                    }
+                    if((*(p+3) == NCI_DISCOVERY_TYPE_LISTEN_F) ||
+                       (*(p+3) == NCI_DISCOVERY_TYPE_LISTEN_A) ||
+                       (*(p+3) == NCI_DISCOVERY_TYPE_LISTEN_B)
+                      )
+                    {
+                        HAL_TRACE_DEBUG0 ("Listen mode activated");
+                        nfc_hal_cb.listen_mode_activated = TRUE;
                     }
                     if ((nfc_hal_cb.max_rf_credits) && (payload_len > 5))
                     {
@@ -644,9 +653,11 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                     }
                     else
                     {
+                        HAL_TRACE_DEBUG1 ("nfc_hal_cb.listen_mode_activated=%X",nfc_hal_cb.listen_mode_activated);
                         if((*(p) == NCI_DEACTIVATE_TYPE_DISCOVERY) &&
-                            ( nfc_hal_cb.act_interface != NCI_INTERFACE_EE_DIRECT_RF)
-                             )
+                           (!nfc_hal_cb.listen_mode_activated) &&
+                           ( nfc_hal_cb.act_interface != NCI_INTERFACE_EE_DIRECT_RF)
+                          )
                         {
                             nfc_hal_cb.dev_cb.nfcc_sleep_mode = 0;
                             nfc_hal_dm_send_prop_sleep_cmd ();
