@@ -366,6 +366,19 @@ static inline int isWake(int state)
         current_nfc_wake_state == asserted_state;
 }
 
+/*******************************************************************************
+**
+** Function         isSleep
+**
+** Description      return current status if the NFCC is in sleep state
+**
+** Returns          Returns TRUE if NFCC is in sleep state or FALSE if awake
+**
+*******************************************************************************/
+UINT8 isSleep(void)
+{
+    return nfc_hal_cb.is_sleeping;
+}
 NFC_RETURN_CODE DT_Set_Power(int state)
 {
     int ret;
@@ -823,8 +836,10 @@ UINT32 DT_read_thread(UINT32 arg)
                 ALOGD( "DT_read_thread(): exiting\n");
                 break;
             }
-            else if (rx_length == 0 && !isWake(-1))
+            else if (rx_length == 0 && (isSleep()))
+            {
                 continue;
+            }
             ++error_count;
             if (rx_length <= 0 && ((error_count > 0) && ((error_count % iMaxError) == 0)))
             {
