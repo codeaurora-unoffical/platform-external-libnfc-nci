@@ -44,7 +44,8 @@
 ** Constants and types
 *****************************************************************************/
 extern char current_mode;
-
+extern sem_t semaphore_sleepcmd_complete;
+extern UINT8 wait_reset_rsp;
 /*****************************************************************************
 ** Local function prototypes
 *****************************************************************************/
@@ -439,6 +440,12 @@ BOOLEAN nfc_hal_nci_receive_msg (void)
     BOOLEAN msg_received = FALSE;
 
     msg_received = nfc_hal_nci_receive_nci_msg (p_cb);
+    if(nfc_hal_cb.wait_sleep_rsp)
+    {
+        HAL_TRACE_DEBUG0("posting semaphore_sleepcmd_complete \n");
+        sem_post(&semaphore_sleepcmd_complete);
+        nfc_hal_cb.wait_sleep_rsp = FALSE;
+    }
     return msg_received;
 }
 
@@ -462,14 +469,32 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
     UINT8 *nvmcmd = NULL, nvmcmdlen = 0;
     UINT32 nvm_update_flag = 0;
     UINT32 pm_flag = 0;
+    UINT8 *p1;
 
     HAL_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg()");
     GetNumValue("NVM_UPDATE_ENABLE_FLAG", &nvm_update_flag, sizeof(nvm_update_flag));
     GetNumValue("PM_ENABLE_FLAG", &pm_flag, sizeof(pm_flag));
 
+    HAL_TRACE_DEBUG1 ("wait_reset_rsp : %d",wait_reset_rsp);
+    if(wait_reset_rsp)
+    {
+        p1 = (UINT8 *) (p_msg + 1) + p_msg->offset;
+        NCI_MSG_PRS_HDR0 (p1, mt, pbf, gid);
+        NCI_MSG_PRS_HDR1 (p1, op_code);
+        if((gid == NCI_GID_CORE) && (op_code == NCI_MSG_CORE_CONN_CREDITS) && (mt == NCI_MT_NTF))
+        {
+            HAL_TRACE_DEBUG0 ("core_con_credite ntf ignored...");
+            //wait_reset_rsp = FALSE;
+            return FALSE;
+        }
+        if((gid == NCI_GID_CORE) && (op_code == NCI_MSG_CORE_RESET) && (mt == NCI_MT_RSP))
+        {
+            HAL_TRACE_DEBUG0 (" core reset rsp recieved...");
+            wait_reset_rsp = FALSE;
+        }
+    }
     if (nfc_hal_cb.propd_sleep)
     {
-        UINT8 *p1;
         p1 = (UINT8 *) (p_msg + 1) + p_msg->offset;
         NCI_MSG_PRS_HDR0 (p1, mt, pbf, gid);
         HAL_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg() propd_sleep");
@@ -578,6 +603,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
             {
                 if (op_code == NCI_MSG_RF_INTF_ACTIVATED)
                 {
+                    nfc_hal_cb.act_interface = NCI_INTERFACE_MAX + 1;
                     /*check which interface is activated*/
                     if((*(p+1) == NCI_INTERFACE_NFC_DEP))
                     {
@@ -605,12 +631,27 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                     {
                         nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
                     }
+                    else
+                    {
+                        nfc_hal_cb.act_interface = NCI_INTERFACE_EE_DIRECT_RF;
+                    }
                 }
                 if (op_code == NCI_MSG_RF_DEACTIVATE)
                 {
                     if(nfc_hal_cb.act_interface == NCI_INTERFACE_NFC_DEP)
                     {
                         nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
+                    }
+                    else
+                    {
+                        if((*(p) == NCI_DEACTIVATE_TYPE_DISCOVERY) &&
+                            ( nfc_hal_cb.act_interface != NCI_INTERFACE_EE_DIRECT_RF)
+                             )
+                        {
+                            nfc_hal_cb.dev_cb.nfcc_sleep_mode = 0;
+                            nfc_hal_dm_send_prop_sleep_cmd ();
+                            nfc_hal_cb.propd_sleep = 1;
+                        }
                     }
                 }
             }
@@ -625,11 +666,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                             if (*p  == 0x00) //status good
                             {
                                 nfc_hal_dm_send_prop_sleep_cmd ();
-                                if (op_code == NCI_MSG_RF_DEACTIVATE)
-                                {
-                                    HAL_TRACE_DEBUG0 ("NCI_MSG_RF_DEACTIVATE propd_sleep");
-                                    nfc_hal_cb.propd_sleep = 1;
-                                }
+                                nfc_hal_cb.init_sleep_done = 1;
                             }
                         }
                 }
@@ -650,7 +687,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                             nfc_hal_dm_send_prop_sleep_cmd ();
                             nfc_hal_cb.propd_sleep = 1;
                             nfc_hal_cb.listen_setConfig_rsp_cnt = 0;
-                            nfc_hal_cb.act_interface = 0;
+                            nfc_hal_cb.act_interface = NCI_INTERFACE_MAX + 1;
                         }
                     }
                 }
