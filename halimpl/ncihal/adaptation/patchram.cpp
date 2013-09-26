@@ -87,6 +87,9 @@ static void mayDisableSecureElement (StartupConfig& config);
 #define NFA_APP_DEFAULT_I2C_PATCHFILE_NAME  "\0"
 #endif
 
+UINT32 patch_version = 0;
+#define NFCC_VERSION_V20  20
+#define NFCC_VERSION_V21  21
 tNFC_POST_RESET_CB nfc_post_reset_cb =
 {
     /* Default Patch & Pre-Patch */
@@ -112,8 +115,6 @@ tNFC_POST_RESET_CB nfc_post_reset_cb =
     TRUE,                           /* debug mode for downloading patchram */
     FALSE                           /* skip downloading patchram after reinit because of patch download failure */
 };
-
-
 /*******************************************************************************
 **
 ** Function         getFileLength
@@ -240,7 +241,6 @@ static void postDownloadPatchram(tHAL_NFC_STATUS status)
     }
 }
 
-
 /*******************************************************************************
 **
 ** Function:    prmCallback
@@ -287,7 +287,6 @@ void prmCallback(UINT8 event)
         break;
     }
 }
-
 
 /*******************************************************************************
 **
@@ -741,6 +740,7 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
 {
     UINT32 patch_len = 0;
     UINT8 patchlengthinfo[4] = {0};
+    UINT8 *ver_ptr = NULL;
 
     if(patchdata == NULL || genproprsp == NULL )
     {
@@ -749,8 +749,34 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
 
     memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
     patch_len = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
-    if(memcmp((genproprsp+FW_VERSION_OFFSET),(patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
-               patch_len-FW_VERSION_OCTETS-PATCH_OCTETS),FW_VERSION_OCTETS) == 0)
+
+    /*chech patch version V2.0/V2.1*/
+    if (patch_version == 0) {
+       check_patch_version(&patch_version);
+    }
+    switch (patch_version)
+    {
+        case NFCC_VERSION_V20:
+        {
+            HAL_TRACE_DEBUG0("PATCH Update : FW_2.0 enabled");
+            ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                       patch_len-FW_VERSION_OCTETS-PATCH_OCTETS);
+            break;
+        }
+        case NFCC_VERSION_V21:
+        {
+            ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                       patch_len);
+            break;
+        }
+        default:
+        {//v2.0
+            ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                       patch_len-FW_VERSION_OCTETS-PATCH_OCTETS);
+            break;
+        }
+    }
+    if((memcmp((genproprsp+FW_VERSION_OFFSET),ver_ptr ,FW_VERSION_OCTETS) == 0))
     {
        return TRUE;
     }
@@ -773,7 +799,12 @@ UINT8 nfc_hal_check_signature_fw_ver_2(UINT8 *genproprsp,UINT8 resplen,UINT8 *pa
     UINT32 patch_len = 0,i=0;
     UINT16 public_key_len = 0;
     UINT8 patchlengthinfo[4] = {0},public_key_len_info[2]={0};
+    UINT8 *ver_ptr = NULL;
 
+    //chech patch version
+    if (patch_version == 0) {
+       check_patch_version(&patch_version);
+    }
     HAL_TRACE_DEBUG2("PATCH Update :%X %X",genproprsp[0],genproprsp[1]);
 
     memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
@@ -786,10 +817,37 @@ UINT8 nfc_hal_check_signature_fw_ver_2(UINT8 *genproprsp,UINT8 resplen,UINT8 *pa
 
     public_key_len = getlength(public_key_len_info,PUBLIC_KEY_LENGTH_OCTETS);
 
-    /*1 deducted from rsplen to remove length byte*/
-    if(memcmp((genproprsp+(resplen-SIGNATURE_LENGTH)),(patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
-               patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS+PUBLIC_KEY_LENGTH_OCTETS+ \
-               public_key_len+SIGNATURE_LENGTH_OCTETS-1),SIGNATURE_LENGTH) != 0)
+    switch (patch_version)
+    {
+       case NFCC_VERSION_V20:
+       {
+           /*1 deducted from rsplen to remove length byte*/
+           ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                      patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS+PUBLIC_KEY_LENGTH_OCTETS+ \
+                      public_key_len+SIGNATURE_LENGTH_OCTETS-1);
+           break;
+       }
+       case NFCC_VERSION_V21:
+       {
+           UINT8 totallengthinfo[4] = {0};
+           UINT32 total_len=0;
+           memcpy(totallengthinfo,patchdata,TOTAL_LENGTH_OCTETS);
+           total_len = getlength(totallengthinfo,TOTAL_LENGTH_OCTETS);
+           HAL_TRACE_DEBUG1("PATCH Update :%d",total_len);
+           ver_ptr = (patchdata+total_len-SIGNATURE_LENGTH);
+           break;
+       }
+       default:
+       {
+           /*1 deducted from rsplen to remove length byte*/
+           ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                      patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS+PUBLIC_KEY_LENGTH_OCTETS+ \
+                      public_key_len+SIGNATURE_LENGTH_OCTETS-1);
+           break;
+       }
+    }
+
+    if(memcmp((genproprsp+(resplen-SIGNATURE_LENGTH)),ver_ptr ,SIGNATURE_LENGTH) != 0)
     {
        return PATCH_NOT_UPDATED;
     }
@@ -823,4 +881,9 @@ void mayDisableSecureElement (StartupConfig& config)
         ALOGD ("%s: disable 0x%02X", __FUNCTION__, (UINT8) bitmask);
         config.disableSecureElement ((UINT8) (bitmask & 0xC0));
     }
+}
+
+void check_patch_version(UINT32 *version)
+{
+   GetNumValue("PATCH_VERSION", version, sizeof(*version));
 }

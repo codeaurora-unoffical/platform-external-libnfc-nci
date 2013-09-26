@@ -977,13 +977,15 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
 
    if (pDriverConfig->devFile == NULL) {
        HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open : devFile NULL");
-       return NFC_FAILED;
+       retstatus = NFC_FAILED;
+       goto done_open;
    }
 
    if ((pDriverConfig == NULL) || (pdTransportHandle == NULL))
    {
        HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open : phwref == NULL");
-       return NFC_INVALID;
+       retstatus = NFC_FAILED;
+       goto done_open;
    }
 
    memset(&dTransport, 0, sizeof(DT_Nfc_Phy_select_t));
@@ -1016,7 +1018,7 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
    {
        HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open : can't open DT ..");
        retstatus = NFC_FAILED;
-       return retstatus;
+       goto done_open;
    }
 
    if ((int) (*pdTransportHandle) == 0){
@@ -1030,7 +1032,7 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
    {
        HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open (second): can't open DT ...");
        retstatus = NFC_FAILED;
-       return retstatus;
+       goto done_open;
    }
 
    /* Store context here now */
@@ -1042,7 +1044,8 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
    /* Initialise semaphore */
    if(sem_init(&data_available, 0, 0) == -1){
         HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open : NFC Init Semaphore creation Error");
-        return -1;
+        retstatus = NFC_FAILED;
+        goto done_open;
    }
 
    /* Create reader thread */
@@ -1068,7 +1071,7 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
 #ifndef USING_POLL_WAIT
    reg_int_handler(linux_cb.sock);
 #endif
-
+done_open:
    pthread_mutex_unlock(&close_thread_mutex);
    ALOGI("DT_Nfc_Open(): exit retstatus = %d ",retstatus);
    return retstatus;

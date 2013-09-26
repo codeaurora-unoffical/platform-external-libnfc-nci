@@ -29,3 +29,5 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 1. jbmr2(AU_LINUX_ANDROID_JB_3.2_RB2.04.03.00.129.005)code merge from jbmr1
 2. NVM crash issue. temp. direct ee workaround.
+3. let nfcc decide for nfcid1 for type A listen
+4. CR-524065,490753,524864
