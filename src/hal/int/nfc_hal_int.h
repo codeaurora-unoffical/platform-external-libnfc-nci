@@ -471,6 +471,7 @@ typedef struct
     UINT8                   wait_sleep_rsp;
     UINT8                   listen_setConfig_rsp_cnt;
     UINT8                   act_interface;
+    UINT8                   listen_mode_activated;
 
 } tNFC_HAL_CB;
 
