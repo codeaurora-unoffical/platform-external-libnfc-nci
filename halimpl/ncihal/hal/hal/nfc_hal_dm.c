@@ -1348,23 +1348,8 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
             }
             else if(op_code == NCI_MSG_CORE_CONN_CLOSE)
             {
-                if((!nfc_hal_cb.dev_cb.pre_patch_applied) ||(!nfc_hal_cb.dev_cb.patch_applied))
-                {
-                    if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
-                    {
-                        HAL_TRACE_DEBUG0("PATCH Update : Pre patch data sending dynamic connection closed...Sending prop cmd to check pre patch signature again");
-                    }
-                    else
-                    {
-                        HAL_TRACE_DEBUG0("PATCH Update : Patch data sending dynamic connection closed...Sending prop cmd to check patch signature again");
-                    }
-                 check_patch_version(&patch_version);
-                 if (patch_version == 20)
-                 {
-                     NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_PATCH_INFO);
-                     nfc_hal_dm_send_nci_cmd (nfc_hal_dm_QC_prop_cmd_patchinfo, 4, NULL);
-                 }
-                }
+
+               HAL_TRACE_DEBUG0("PATCH Update : Pre patch data sending dynamic connection closed...Sending prop cmd to check pre patch signature again");
             }
         }
         else
@@ -1429,14 +1414,14 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                     if((!nfc_hal_cb.dev_cb.pre_patch_applied) && (nfc_hal_cb.dev_cb.pre_patch_file_available))
                     {
                         HAL_TRACE_DEBUG0("PATCH Update : Checking Prepatch Signature");
-                        patch_update = nfc_hal_check_signature_fw_ver_2(p,len,prepatchdata,prepatchdatalen);
+                        patch_update = nfc_hal_check_fw_signature(p,len,prepatchdata,prepatchdatalen);
                         nfc_hal_cb.dev_cb.pre_patch_signature_chk = TRUE;
                     }
                     else
                     {
                         /*Pre patch applied .Now checking patch signature*/
                         HAL_TRACE_DEBUG0("PATCH Update : Checking patch Signature");
-                        patch_update = nfc_hal_check_signature_fw_ver_2(p,len,patchdata,patchdatalen);
+                        patch_update = nfc_hal_check_fw_signature(p,len,patchdata,patchdatalen);
                         nfc_hal_cb.dev_cb.patch_signature_chk = TRUE;
                     }
                     if(patch_update == PATCH_NOT_UPDATED)
