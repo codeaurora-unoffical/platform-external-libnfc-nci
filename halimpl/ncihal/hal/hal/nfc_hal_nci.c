@@ -468,7 +468,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
     UINT8 nvmupdatebuff[260]={0},nvmdatabufflen=0;
     UINT8 *nvmcmd = NULL, nvmcmdlen = 0;
     UINT32 nvm_update_flag = 0;
-    UINT32 pm_flag = 0;
+    UINT32 pm_flag = 0, region2_enable=0;
     UINT8 *p1;
 
     HAL_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg()");
@@ -723,6 +723,21 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                         p++; /* skip buff size */
                         p++; /* num of buffers */
                         nfc_hal_cb.hci_cb.hcp_conn_id = *p;
+                        }
+                    }
+                    /* TODO: Remove conf file check after test*/
+                    GetNumValue("REGION2_ENABLE", &region2_enable, sizeof(region2_enable));
+                    if(region2_enable)
+                    {
+                        if(op_code == NCI_MSG_CORE_RESET)
+                        {
+                            /*Send NciRegionControlEnable command every time after CORE_RESET cmd*/
+                            HAL_TRACE_DEBUG0 ("Sending NciRegionControlEnable command..");
+                            nfc_hal_dm_send_prop_nci_region2_control_enable_cmd(REGION2_CONTROL_ENABLE);
+                        }
+                        if(op_code == NCI_MSG_CORE_INIT)
+                        {
+                            nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
                         }
                     }
                     if(current_mode != FTM_MODE)
