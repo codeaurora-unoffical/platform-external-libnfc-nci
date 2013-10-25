@@ -404,7 +404,7 @@ typedef UINT8 tNCI_INTF_TYPE;
 #define NCI_PROTOCOL_15693              0x83
 #endif
 #ifndef NCI_PROTOCOL_KOVIO
-#define NCI_PROTOCOL_KOVIO              0x8a
+#define NCI_PROTOCOL_KOVIO              0x82
 #endif
 
 
@@ -415,7 +415,7 @@ typedef UINT8 tNCI_INTF_TYPE;
 #define NCI_DISCOVERY_TYPE_POLL_A_ACTIVE        0x03
 #define NCI_DISCOVERY_TYPE_POLL_F_ACTIVE        0x05
 #define NCI_DISCOVERY_TYPE_POLL_B_PRIME         0x74
-#define NCI_DISCOVERY_TYPE_POLL_KOVIO           0x77
+#define NCI_DISCOVERY_TYPE_POLL_KOVIO           0x71
 #define NCI_DISCOVERY_TYPE_LISTEN_A             0x80
 #define NCI_DISCOVERY_TYPE_LISTEN_B             0x81
 #define NCI_DISCOVERY_TYPE_LISTEN_F             0x82
