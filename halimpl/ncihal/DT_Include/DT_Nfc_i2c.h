@@ -36,3 +36,4 @@ void				DT_Nfc_i2c_flush(void);
 void				DT_Nfc_i2c_close(void);
 NFC_RETURN_CODE		DT_Nfc_i2c_setup(pDT_Nfc_sConfig_t pConfig, void ** pdTransportHandle);
 int					DT_Nfc_i2c_reset(long state);
+int					DT_Nfc_i2c_version(long field);

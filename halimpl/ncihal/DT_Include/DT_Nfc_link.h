@@ -46,6 +46,7 @@ typedef NFC_RETURN_CODE	(*DT_Nfc_link_setup_CB_t)				(pDT_Nfc_sConfig_t pConfig,
 typedef int				(*DT_Nfc_link_read_CB_t)				(uint8_t * pStore, int NumToRd);
 typedef int				(*DT_Nfc_link_write_CB_t)				(uint8_t * pStore, int nNbBytesToWrite);
 typedef int				(*DT_Nfc_link_reset_CB_t)				(long state);
+typedef int				(*DT_Nfc_link_version_CB_t)				(long field);
 
 
 typedef struct
@@ -56,4 +57,5 @@ typedef struct
 	DT_Nfc_link_read_CB_t					rd;
 	DT_Nfc_link_write_CB_t					wr;
 	DT_Nfc_link_reset_CB_t					rst;
+	DT_Nfc_link_version_CB_t				version;
 } DT_Nfc_Phy_select_t;
