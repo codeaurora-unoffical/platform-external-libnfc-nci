@@ -103,7 +103,7 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
 ** not.
 */
 //UINT8 nfc_hal_check_patch_signature(UINT8 *genproprsp,UINT8 resplen);
-UINT8 nfc_hal_check_signature_fw_ver_2(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT32 patchdatalen);
+UINT8 nfc_hal_check_fw_signature(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT32 patchdatalen);
 UINT8 nfc_hal_check_patch_signature(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT32 patchdatalen);
 /*
 ** NFC hal check prepatch signature function
