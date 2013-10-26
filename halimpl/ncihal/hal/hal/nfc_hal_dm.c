@@ -49,7 +49,6 @@
 #define NFC_HAL_I93_ENABLE_SMART_POLL       (1)
 #define PATCH_NOT_UPDATED                    3
 #define PATCH_UPDATED                        4
-#define BUFFER_MAX                          (1024*100)
 
 static UINT8 nfc_hal_dm_i93_rw_cfg[NFC_HAL_I93_RW_CFG_LEN] =
 {
@@ -381,33 +380,6 @@ int nfc_hal_dm_get_nfc_sleep_state (void)
 {
     return nfc_hal_cb.dev_cb.nfcc_sleep_mode;
 }
-/*******************************************************************************
-**
-** Function         dump_patch_data_g
-**
-** Description      dump the patch data in Android
-**
-** Returns          void
-**
-*******************************************************************************/
-void dump_patch_data_g(const UINT8 *pPatchDataBuffer,const UINT32 patchfilelen)
-{
-    if(pPatchDataBuffer != NULL)
-    {
-      const UINT8* buff = pPatchDataBuffer;
-      UINT32 buff_length = patchfilelen;
-      UINT32 k = 0, j = 0;
-      char printf_buff[BUFFER_MAX];
-      j = snprintf(printf_buff,BUFFER_MAX,"Memory dump %lu bytes located at %p:  ", buff_length,(void *)buff);
-      if(j > 0){
-          for (k = 0; k < buff_length; k++){
-              snprintf(&printf_buff[j+k*3],(size_t)BUFFER_MAX,"%02X ",buff[k]);
-          }
-      }
-      HAL_TRACE_DEBUG1("PATCH UPDATE :memorydump : %s",printf_buff);
-   }
-}
-
 /*******************************************************************************
 **
 ** Function         nfc_hal_send_data
@@ -1083,7 +1055,6 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             if(nfc_hal_cb.dev_cb.pre_patch_file_available)
                             {
                                 HAL_TRACE_DEBUG1 ("PATCH Update: Pre patch file length is ==%d \n\n",prepatchdatalen);
-                                dump_patch_data_g(prepatchdata,prepatchdatalen);
                             }
                             else
                             {
@@ -1094,7 +1065,6 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             if(nfc_hal_cb.dev_cb.patch_file_available)
                             {
                                 HAL_TRACE_DEBUG1 ("PATCH Update: Patch file length is ==%d \n\n",patchdatalen);
-                                dump_patch_data_g(patchdata,patchdatalen);
                             }
                             else
                             {
