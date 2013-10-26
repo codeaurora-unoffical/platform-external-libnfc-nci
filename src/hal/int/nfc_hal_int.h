@@ -472,6 +472,9 @@ typedef struct
     UINT8                   listen_setConfig_rsp_cnt;
     UINT8                   act_interface;
     UINT8                   listen_mode_activated;
+    UINT8                   kovio_activated;
+    UINT8                   is_sleeping;
+
 
 } tNFC_HAL_CB;
 
