@@ -39,6 +39,8 @@
 #include <DT_Nfc.h>
 #include <config.h>
 #include <stdlib.h>
+#include <time.h>
+#include <fcntl.h>
 /*****************************************************************************
 ** Constants and types
 *****************************************************************************/
@@ -126,6 +128,30 @@ const UINT8 nfc_hal_dm_QC_prop_cmd_fwversion[4] =
 {
     0x2f, 0x01, 0x01, 0x00
 };
+
+const UINT8 nfc_hal_dm_prop_region2_enable_debug_off_cmd[5] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    0x01, 0x02, 0X08, 0X00
+};
+
+const UINT8 nfc_hal_dm_prop_region2_enable_debug_on_cmd[5] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    0x01, 0x02, 0X08, 0X01
+};
+
+const UINT8 nfc_hal_dm_prop_region2_control_enable[5] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    0x01, 0x02, 0X07, 0X01
+};
+const UINT8 nfc_hal_dm_prop_region2_control_disable[5] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    0x01, 0x02, 0X08, 0X00
+};
+
 UINT16 more_updates = 0;
 static UINT8 patch_applied = FALSE, patch_last_data_buff_sent = FALSE;
 static UINT8 gen_err_ntf_recieved = FALSE, after_patch_core_reset = FALSE;
@@ -1859,6 +1885,183 @@ static void nci_nfc_lp_timeout_cback (void *p_tle)
     nfc_hal_dm_power_mode_execute (NFC_HAL_LP_TIMEOUT_EVT);
 }
 
+/****************************************************************************************
+**
+** Function         nfc_hal_read_battery_capacity
+**
+** Description      This function will read the battery capacity and will keep track
+**                  on battery power to put NFCC in region 2.
+**
+** Returns          void
+**
+******************************************************************************************/
+UINT8 nfc_hal_check_system_battery(UINT8 check)
+{
+    const UINT16 SIZE = 128;
+    UINT8 buf[SIZE+1];
+    int fd = 0;
+    switch(check)
+    {
+        case CHECK_BATTERY_PRESENCE:
+            fd = open(POWER_SUPPLY_PATH_BATTERY_PRESENT, O_RDONLY, 0);
+            break;
+        case CHECK_BATTERY_CAPACITY:
+            fd = open(POWER_SUPPLY_PATH_BATTERY_CAPACITY, O_RDONLY, 0);
+            break;
+        default:
+            break;
+    }
+
+    if (fd == -1)
+    {
+        HAL_TRACE_DEBUG1("Could not open '%s'",POWER_SUPPLY_PATH_BATTERY_CAPACITY);
+        return -1;
+    }
+
+    ssize_t count = read(fd, buf, SIZE);
+    if (count <= 0) {
+	buf[0] = '\0';
+    } else {
+        buf[count]='\0';
+    }
+
+    close(fd);
+
+    HAL_TRACE_DEBUG1("Battery Capacity = %d ",atoi(buf));
+    return (atoi(buf));
+}
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_prop_nci_region2_control_enable_cmd
+**
+** Description      Sends proprietary command to NFCC to put it in Region 2
+**                  operating mode.
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_nci_region2_control_enable_cmd(UINT8 debaug_status)
+{
+    switch(debaug_status)
+    {
+        case REGION2_CONTROL_ENABLE:
+            nfc_hal_dm_send_nci_cmd(nfc_hal_dm_prop_region2_control_enable, NCI_MSG_HDR_SIZE+2, NULL);
+            break;
+        case REGION2_CONTROL_DISABLE:
+            nfc_hal_dm_send_nci_cmd(nfc_hal_dm_prop_region2_control_disable, NCI_MSG_HDR_SIZE+2, NULL);
+            break;
+    }
+}
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_prop_nci_region2_enable_cmd
+**
+** Description      Sends proprietary command to NFCC to put it in Region 2
+**                  operating mode.
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_nci_region2_enable_cmd(UINT8 debaug_status)
+{
+
+    switch(debaug_status)
+    {
+        case REGION2_DEBUG_ENABLE:
+            nfc_hal_dm_send_nci_cmd(nfc_hal_dm_prop_region2_enable_debug_on_cmd, NCI_MSG_HDR_SIZE+2, NULL);
+            break;
+        case REGION2_DEBUG_DISABLE:
+            nfc_hal_dm_send_nci_cmd(nfc_hal_dm_prop_region2_enable_debug_off_cmd, NCI_MSG_HDR_SIZE+2, NULL);
+            break;
+    }
+    nfc_hal_cb.propd_sleep = TRUE;
+}
+
+/****************************************************************************************************
+**
+** Function         nfc_hal_store_region2_info
+**
+** Description      This will store region 2 enable information in a binary  file /data/nfc/ dir
+**                  in android file system.
+**
+** Returns          void
+**
+******************************************************************************************************/
+void nfc_hal_store_region2_info(UINT8 operation)
+{
+    FILE * pFile;
+    char buffer[1];
+    switch(operation)
+    {
+        case STORE_INFO:
+            buffer[0] = '1';
+            HAL_TRACE_DEBUG0 ("Setting Region2 enable info");
+            break;
+        case REMOVE_INFO:
+            HAL_TRACE_DEBUG0 ("Setting Region2 disable info");
+            buffer[0] = '0';
+            break;
+        default:
+            break;
+    }
+    pFile = fopen ("/data/nfc/nvstorage.bin", "wb");
+    if(pFile)
+    {
+        fwrite (buffer , sizeof(char), sizeof(buffer), pFile);
+        fclose (pFile);
+    }
+}
+
+/***********************************************************************************************************
+**
+** Function         nfc_hal_retrieve_region2_info
+**
+** Description      This will retrieve region 2 enable/disable information in a binary  file /data/nfc/ dir
+**                  in android file system.
+**
+** Returns          void
+**
+***********************************************************************************************************/
+int nfc_hal_retrieve_region2_info(void)
+{
+    FILE * pFile;
+    long lSize;
+    char * buffer;
+    int region2_info;
+    size_t result;
+
+    pFile = fopen ("/data/nfc/nvstorage.bin" , "rb");
+    if (pFile==NULL)
+    {
+        HAL_TRACE_DEBUG0 ("/data/nfc/nvstorage.bin file open failed");
+        return ERROR;
+    }
+    fseek (pFile , 0 , SEEK_END);
+    lSize = ftell (pFile);
+    rewind (pFile);
+
+    buffer = (char*) malloc (sizeof(char)*lSize);
+    if (buffer == NULL)
+    {
+        HAL_TRACE_DEBUG0 ("mem allocation failed ");
+        fclose (pFile);
+        return ERROR;
+    }
+
+    result = fread (buffer,1,lSize,pFile);
+    if (result != lSize)
+    {
+        HAL_TRACE_DEBUG0 ("Read opration failed");
+    }
+
+    region2_info = atoi(buffer);
+    fclose (pFile);
+    free (buffer);
+    return region2_info;
+}
+
 /*******************************************************************************
 **
 ** Function         nfc_hal_dm_pre_init_nfcc
@@ -1871,22 +2074,41 @@ static void nci_nfc_lp_timeout_cback (void *p_tle)
 *******************************************************************************/
 void nfc_hal_dm_pre_init_nfcc (void)
 {
+    UINT16 sem_status, region2_info;
+    UINT32 region2_enable=0;
     HAL_TRACE_DEBUG0 ("nfc_hal_dm_pre_init_nfcc ()");
-    if(!(nfc_post_reset_cb.dev_init_config.flags))
-    {
-        HAL_TRACE_DEBUG0 ("nfc_hal_dm_pre_init_nfcc1 ()");
 #ifdef DISABLE_REWORK
         DT_Set_Power(1);
         DT_Set_Power(0);
         /* Invoke kernel routine to re-initialise NFCC as ALL config will be lost */
         DT_Set_Power(2);
-#else
-        nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
 #endif
-        GKI_delay(10);
+    /* Check if Region2 enable in libnfc-nci.conf file*/
+    GetNumValue("REGION2_ENABLE", &region2_enable, sizeof(region2_enable));
+    if(region2_enable)
+    {
+        region2_info = nfc_hal_retrieve_region2_info();
+        HAL_TRACE_DEBUG1("region2_info=%d ",region2_info);
+        if(region2_info)
+        {
+            /*Region2 enabled during last NFCC shut down so toggle pin*/
+            DT_Set_Power(1);
+            DT_Set_Power(0);
+            DT_Set_Power(2);
+            /*Write 0 again in nv file to indicate that region2 info
+              has been read which was updated last time*/
+            nfc_hal_store_region2_info(REMOVE_INFO);
+        }
+        else
+        {
+            /*Region2 was not enabled during last NFCC shut down so do nci wake*/
+            nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
+            GKI_delay(10);
+        }
     }
     else
     {
+        /*Region2 is not enabled in libnfc-nci.conf file then do normal wake*/
         nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
         GKI_delay(10);
     }
@@ -1907,15 +2129,39 @@ void nfc_hal_dm_pre_init_nfcc (void)
 *******************************************************************************/
 void nfc_hal_dm_shutting_down_nfcc (void)
 {
+    UINT32 debug_enable = 0,region2_enable=0;
+    UINT8 status = 0,region2_info_test=0;
     HAL_TRACE_DEBUG0 ("nfc_hal_dm_shutting_down_nfcc ()");
 
     nfc_hal_cb.dev_cb.initializing_state = NFC_HAL_INIT_STATE_CLOSING;
 
-    if (  (nfc_hal_cb.dev_cb.power_mode  == NFC_HAL_POWER_MODE_FULL)
-         &&(nfc_hal_cb.init_sleep_done)  )
+    /* Check if Region2 enable in libnfc-nci.conf file*/
+    GetNumValue("REGION2_ENABLE", &region2_enable, sizeof(region2_enable));
+    if(region2_enable)
     {
-        nfc_hal_dm_set_nfc_wake (NFC_HAL_DEASSERT_NFC_WAKE);
-        nfc_hal_cb.propd_sleep = TRUE;
+        GetNumValue("REGION2_DEBUG_ENABLE_FLAG", &debug_enable, sizeof(debug_enable));
+        if(debug_enable)
+            nfc_hal_dm_send_prop_nci_region2_enable_cmd(REGION2_DEBUG_ENABLE);
+        else
+            nfc_hal_dm_send_prop_nci_region2_enable_cmd(REGION2_DEBUG_DISABLE);
+
+        region2_info_test = nfc_hal_retrieve_region2_info();
+        HAL_TRACE_DEBUG1("*****region2_info=%d ",region2_info_test);
+
+        /*Store this information that NFCC has gone in region 2 in /data/nfc/*/
+        nfc_hal_store_region2_info(STORE_INFO);
+        nfc_hal_cb.wait_sleep_rsp = FALSE;
+
+    }
+    else
+    {
+        if (  (nfc_hal_cb.dev_cb.power_mode  == NFC_HAL_POWER_MODE_FULL)
+         &&(nfc_hal_cb.init_sleep_done)  )
+         {
+             /*TODO : Remove after test*/
+             nfc_hal_dm_set_nfc_wake (NFC_HAL_DEASSERT_NFC_WAKE);
+             nfc_hal_cb.propd_sleep = TRUE;
+         }
     }
 
     nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
