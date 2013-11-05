@@ -22,7 +22,7 @@
 #include <vector>
 #include <list>
 
-#define LOG_TAG "NfcAdaptation"
+#define LOG_TAG "NfcNciHal"
 
 const char alternative_config_path[] = "";
 const char transport_config_path[] = "/etc/";
