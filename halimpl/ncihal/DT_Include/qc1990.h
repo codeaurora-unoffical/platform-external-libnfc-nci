@@ -37,3 +37,4 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NFCC_MODE	            _IOW(NFC_MAGIC, 0x02, unsigned int)
 #define SET_RX_BLOCK            _IOW(NFC_MAGIC, 0x03, unsigned int)
 #define SET_EMULATOR_TEST_POINT _IOW(0xE9, 0x04, unsigned int)
+#define NFCC_VERSION			_IOW(0xE9, 0x08, unsigned int)
