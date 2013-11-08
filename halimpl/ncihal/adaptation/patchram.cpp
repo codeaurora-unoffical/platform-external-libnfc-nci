@@ -25,6 +25,8 @@
 #include "userial.h"
 extern "C"
 {
+    #include <DT_Nfc_link.h>
+    #include <DT_Nfc.h>
     #include "nfc_hal_post_reset.h"
 }
 #include <string>
@@ -90,6 +92,23 @@ static void mayDisableSecureElement (StartupConfig& config);
 UINT32 patch_version = 0;
 #define NFCC_VERSION_V20  20
 #define NFCC_VERSION_V21  21
+#define NFCC_VERSION_V30  30
+
+/* This is from the chip version register 0x00 via host */
+#define NFCC_CHIP_VERSION_REG     (0x00)
+#define NFCC_CHIP_VERSION_INVALID (0xFF)
+#define NFCC_VERSION_MAJOR_MASK   (0xF0)
+#define NFCC_VERSION_MINOR_MASK   (0x0F)
+#define NFCC_VERSION_MAJOR_V2     (0x20)
+#define NFCC_VERSION_MAJ0R_V3     (0x30)
+
+#define NFCC_CHIP_REVID_REG       (0x01)
+#define NFCC_METAL_REVISION_MASK  (0x0F)
+#define NFCC_METAL_MASK0          (0x00)
+#define NFCC_METAL_MASK1          (0x01)
+#define NFCC_METAL_MASK2          (0x02)
+#define NFCC_METAL_MASK3          (0x03)
+
 tNFC_POST_RESET_CB nfc_post_reset_cb =
 {
     /* Default Patch & Pre-Patch */
@@ -651,7 +670,6 @@ UINT32 getlength(UINT8 * buffer,UINT8 len)
     const char * hex = "0123456789ABCDEF";
     UINT8 * output = str;
     int i = 0;
-    HAL_TRACE_DEBUG1("len is %d", len);
     if((input == NULL) || len < 1 || len > 12)
     {
         return 0;
@@ -664,7 +682,6 @@ UINT32 getlength(UINT8 * buffer,UINT8 len)
     *output++ = hex[(*input)&0xF];
     *output = 0;
     length = strtoul((const char*)str,&end, 16);
-    HAL_TRACE_DEBUG1("length is %u", length);
     return length;
 }
 /***********************************************************************************************************
@@ -741,6 +758,9 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
     UINT32 patch_len = 0;
     UINT8 patchlengthinfo[4] = {0};
     UINT8 *ver_ptr = NULL;
+    UINT8 chip_version = 0;
+    UINT8 chip_revision_id = 0;
+    UINT8 metal_revision_id = 0;
 
     if(patchdata == NULL || genproprsp == NULL )
     {
@@ -750,10 +770,47 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
     memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
     patch_len = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
 
-    /*chech patch version V2.0/V2.1*/
-    if (patch_version == 0) {
-       check_patch_version(&patch_version);
+    /* First read the NFCC hardware flavour */
+    chip_version = (UINT8)DT_Get_Nfcc_Version(NFCC_CHIP_VERSION_REG);
+    chip_revision_id = (UINT8)DT_Get_Nfcc_Version(NFCC_CHIP_REVID_REG);
+    metal_revision_id = ((chip_revision_id) & (NFCC_METAL_REVISION_MASK));
+
+    /* We are unable to read from hardware directly so read from conf. file */
+    if (chip_version == NFCC_CHIP_VERSION_INVALID)
+    {
+      check_patch_version(&patch_version);
     }
+    else
+    {
+        /* Minor version flags in chip version register NOT currently set in NFCC.
+           We're using metal revisions in chip revision ID register for sub-versions */
+        chip_version &= (NFCC_VERSION_MAJOR_MASK);
+        /* Major version 2 */
+        if (chip_version == NFCC_VERSION_MAJOR_V2)
+        {
+            if (metal_revision_id == NFCC_METAL_MASK0)
+            {
+                patch_version = NFCC_VERSION_V20;
+            }
+            if (metal_revision_id == NFCC_METAL_MASK1)
+            {
+                patch_version = NFCC_VERSION_V21;
+            }
+        }
+        /* Major version 3 */
+        if (chip_version == NFCC_VERSION_MAJ0R_V3)
+        {
+            patch_version = NFCC_VERSION_V30;
+        }
+        /* If we are reading back a different Major chip version - add future versions here..
+           As no others currently supported read from conf. file for now   */
+        if ((chip_version != NFCC_VERSION_MAJOR_V2) && (chip_version != NFCC_VERSION_MAJ0R_V3))
+        {
+            check_patch_version(&patch_version);
+        }
+    }
+    ALOGD("chip version = %d.%d\n", (chip_version>>4), metal_revision_id);
+    ALOGD("patch version selected = %d\n", patch_version);
     switch (patch_version)
     {
         case NFCC_VERSION_V20:
@@ -761,18 +818,22 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
             HAL_TRACE_DEBUG0("PATCH Update : FW_2.0 enabled");
             ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
                        patch_len-FW_VERSION_OCTETS-PATCH_OCTETS);
+            ALOGD("PATCH Version : %X %X",*(ver_ptr+2),*(ver_ptr+3));
             break;
         }
+        case NFCC_VERSION_V30:
         case NFCC_VERSION_V21:
         {
             ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
                        patch_len);
+            ALOGD("PATCH Version : %X %X",*(ver_ptr+2),*(ver_ptr+3));
             break;
         }
         default:
         {//v2.0
             ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
                        patch_len-FW_VERSION_OCTETS-PATCH_OCTETS);
+            ALOGD("PATCH Version : %X %X",*(ver_ptr+2),*(ver_ptr+3));
             break;
         }
     }
@@ -794,26 +855,65 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
 ** Returns          Return length in decimal.
 **
 ************************************************************************************************************/
-UINT8 nfc_hal_check_signature_fw_ver_2(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT32 patchdatalen)
+UINT8 nfc_hal_check_fw_signature(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT32 patchdatalen)
 {
     UINT32 patch_len = 0,i=0;
     UINT16 public_key_len = 0;
     UINT8 patchlengthinfo[4] = {0},public_key_len_info[2]={0};
     UINT8 *ver_ptr = NULL;
+    UINT8 chip_version = 0;
+    UINT8 chip_revision_id = 0;
+    UINT8 metal_revision_id = 0;
 
-    //chech patch version
-    if (patch_version == 0) {
-       check_patch_version(&patch_version);
+    HAL_TRACE_DEBUG1("patch version :%d", patch_version);
+
+    /* First read the NFCC hardware flavour */
+    chip_version = (UINT8)DT_Get_Nfcc_Version(NFCC_CHIP_VERSION_REG);
+    chip_revision_id = (UINT8)DT_Get_Nfcc_Version(NFCC_CHIP_REVID_REG);
+    metal_revision_id = ((chip_revision_id) & (NFCC_METAL_REVISION_MASK));
+
+    /* We are unable to read from hardware directly so read from conf file */
+    if (chip_version == NFCC_CHIP_VERSION_INVALID)
+    {
+      check_patch_version(&patch_version);
     }
-    HAL_TRACE_DEBUG2("PATCH Update :%X %X",genproprsp[0],genproprsp[1]);
+    else
+    {
+        /* Minor version flags in chip version register NOT currently set in NFCC.
+           We're using metal revisions in chip revision ID register for sub-versions */
+        chip_version &= (NFCC_VERSION_MAJOR_MASK);
+        /* Major version 2 */
+        if (chip_version == NFCC_VERSION_MAJOR_V2)
+        {
+            if (metal_revision_id == NFCC_METAL_MASK0)
+            {
+                patch_version = NFCC_VERSION_V20;
+            }
+            if (metal_revision_id == NFCC_METAL_MASK1)
+            {
+                patch_version = NFCC_VERSION_V21;
+            }
+        }
+        /* Major version 3 */
+        if (chip_version == NFCC_VERSION_MAJ0R_V3)
+        {
+            patch_version = NFCC_VERSION_V30;
+        }
+        /* If we are reading back a different Major chip version - add future versions here..
+           As no others currently supported read from conf. file for now   */
+        if ((chip_version != NFCC_VERSION_MAJOR_V2) && (chip_version != NFCC_VERSION_MAJ0R_V3))
+        {
+            check_patch_version(&patch_version);
+        }
+    }
+    ALOGD("CHIP_REVISION_ID = %d\n", chip_revision_id);
+    ALOGD("CHIP_VERSION = %d.%d\n", (chip_version>>4), metal_revision_id);
 
     memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
     patch_len = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
 
     memcpy(public_key_len_info,(patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
            patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS),PUBLIC_KEY_LENGTH_OCTETS);
-
-    HAL_TRACE_DEBUG2("PATCH Update :%X %X",public_key_len_info[0],public_key_len_info[1]);
 
     public_key_len = getlength(public_key_len_info,PUBLIC_KEY_LENGTH_OCTETS);
 
@@ -827,6 +927,7 @@ UINT8 nfc_hal_check_signature_fw_ver_2(UINT8 *genproprsp,UINT8 resplen,UINT8 *pa
                       public_key_len+SIGNATURE_LENGTH_OCTETS-1);
            break;
        }
+       case NFCC_VERSION_V30:
        case NFCC_VERSION_V21:
        {
            UINT8 totallengthinfo[4] = {0};
