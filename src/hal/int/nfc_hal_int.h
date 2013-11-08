@@ -148,9 +148,24 @@ extern NFC_HAL_TRANS_CFG_QUALIFIER tNFC_HAL_TRANS_CFG nfc_hal_trans_cfg;
 #define HCI_BRCM_UPDATE_BAUD_RATE_UNENCODED_LENGTH      0x06
 #define HCIE_PREAMBLE_SIZE                  2
 
-/****************************************************************************
+/***************************************************************************************
+** Battery status file system path
+****************************************************************************************/
+#define POWER_SUPPLY_PATH_BATTERY_CAPACITY    "/sys/class/power_supply/battery/capacity"
+#define POWER_SUPPLY_PATH_BATTERY_PRESENT     "/sys/class/power_supply/battery/present"
+#define CHECK_BATTERY_PRESENCE                1
+#define CHECK_BATTERY_CAPACITY                2
+#define REGION2_DEBUG_DISABLE                 0
+#define REGION2_DEBUG_ENABLE                  1
+#define ERROR                                 3
+#define REGION2_CONTROL_DISABLE               0
+#define REGION2_CONTROL_ENABLE                1
+#define STORE_INFO                            1
+#define REMOVE_INFO                           0
+
+/****************************************************************************************
 ** Internal constants and definitions
-****************************************************************************/
+*****************************************************************************************/
 
 /* NFC HAL receiving states */
 enum
@@ -472,6 +487,9 @@ typedef struct
     UINT8                   listen_setConfig_rsp_cnt;
     UINT8                   act_interface;
     UINT8                   listen_mode_activated;
+    UINT8                   kovio_activated;
+    UINT8                   is_sleeping;
+
 
 } tNFC_HAL_CB;
 

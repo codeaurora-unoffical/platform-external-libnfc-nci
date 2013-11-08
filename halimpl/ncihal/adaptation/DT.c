@@ -217,8 +217,6 @@ typedef struct DT_RdWr_st
     char                WriteBusy;
 } DT_Nfc_RdWr_t;
 
-
-
 static DT_Nfc_RdWr_t            RdWrContext;
 static DT_Nfc_Phy_select_t      dTransport;
 static DT_Nfc_sConfig_t         DriverConfig;
@@ -366,6 +364,19 @@ static inline int isWake(int state)
         current_nfc_wake_state == asserted_state;
 }
 
+/*******************************************************************************
+**
+** Function         isSleep
+**
+** Description      return current status if the NFCC is in sleep state
+**
+** Returns          Returns TRUE if NFCC is in sleep state or FALSE if awake
+**
+*******************************************************************************/
+UINT8 isSleep(void)
+{
+    return nfc_hal_cb.is_sleeping;
+}
 NFC_RETURN_CODE DT_Set_Power(int state)
 {
     int ret;
@@ -379,6 +390,19 @@ NFC_RETURN_CODE DT_Set_Power(int state)
     }
     return 0;
 }
+
+
+/* Method to return NFCC hardware version */
+int DT_Get_Nfcc_Version(int field)
+{
+    int retversion = 0xFF;
+    if (field >= 0)
+    {
+        retversion = dTransport.version(field);
+    }
+    return (retversion);
+}
+
 
 /*******************************************************************************
 **
@@ -536,7 +560,7 @@ static inline int reset_signal()
 *******************************************************************************/
 static inline int is_signaled(struct pollfd* set)
 {
-    return ((set->revents & POLLIN) == POLLIN) || ((set->revents & POLLRDNORM) == POLLRDNORM) ;
+    return ((set->revents & POLLIN) == POLLIN) || ((set->revents & POLLRDNORM) == POLLRDNORM);
 }
 
 /******************************************************************************/
@@ -823,8 +847,10 @@ UINT32 DT_read_thread(UINT32 arg)
                 ALOGD( "DT_read_thread(): exiting\n");
                 break;
             }
-            else if (rx_length == 0 && !isWake(-1))
+            else if (rx_length == 0 && (isSleep()))
+            {
                 continue;
+            }
             ++error_count;
             if (rx_length <= 0 && ((error_count > 0) && ((error_count % iMaxError) == 0)))
             {
@@ -957,6 +983,10 @@ void userial_io_init_bt_wake( int fd, unsigned long * p_wake_state )
 NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportHandle, void (*nci_cb) )
 {
    NFC_RETURN_CODE retstatus = NFC_SUCCESS;
+   UINT16 chip_version;
+   UINT16 chip_revid;
+   UINT16 chip_version_major = 0;
+   UINT16 metal_version = 0;
    UINT16 Cfg;
 
    /* if userial_close_thread() is waiting to run; let it go first;
@@ -969,8 +999,9 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
            ALOGI("DT_Nfc_Open(): wait for close-thread");
            sleep (1);
         }
-        else
+        else {
             break;
+        }
    }
 
    HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open");
@@ -1005,10 +1036,12 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
          dTransport.close       = DT_Nfc_i2c_close;
          dTransport.setup       = DT_Nfc_i2c_setup;
          dTransport.rst         = DT_Nfc_i2c_reset;
+         dTransport.version     = DT_Nfc_i2c_version;
          break;
       }
       default:
       {
+         break;
       }
    }
    dTransport.init();
@@ -1016,7 +1049,7 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
 
    if (retstatus != NFC_SUCCESS)
    {
-       HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open : can't open DT ..");
+       HAL_TRACE_DEBUG0 ("NFC:DT:DT_Nfc_Open **FAIL**: NFC DEVICE NOT LOADED or NFCC HARDWARE NOT FOUND");
        retstatus = NFC_FAILED;
        goto done_open;
    }
@@ -1030,7 +1063,7 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
 
    if (retstatus != NFC_SUCCESS)
    {
-       HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open (second): can't open DT ...");
+       HAL_TRACE_DEBUG0 ("NFC:DT:DT_Nfc_Open FAIL (second): can't open DT ...");
        retstatus = NFC_FAILED;
        goto done_open;
    }
@@ -1047,6 +1080,13 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
         retstatus = NFC_FAILED;
         goto done_open;
    }
+
+   /* Get and log NFCC version */
+   chip_version = DT_Get_Nfcc_Version(0);
+   chip_version_major = ((chip_version >> 4)&(0xF));
+   chip_revid = DT_Get_Nfcc_Version(1);
+   metal_version = (chip_revid & (0xF));
+   ALOGD("DT:DT_Nfc_Open : chip version = %d.%d\n", chip_version_major, metal_version);
 
    /* Create reader thread */
    GKI_create_task ((TASKPTR)DT_read_thread, USERIAL_HAL_TASK, (INT8*)"USERIAL_HAL_TASK", 0, 0, (pthread_cond_t*)NULL, NULL);

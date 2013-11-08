@@ -254,10 +254,24 @@ PURPOSE:  Control the (GPIO_RESET/VEN) pin, legacy Reset Pin
 -----------------------------------------------------------------------------*/
 int DT_Nfc_i2c_reset(long state)
 {
-    HAL_TRACE_DEBUG1("I2C:DT_Nfc_i2c_reset : VEN state = %d \n", state);
+    HAL_TRACE_DEBUG1("I2C:DT_Nfc_i2c_reset : NFCC power = %d \n", state);
     return ioctl(I2C_Inst.DeviceFileHandle, NFC_SET_PWR, state);
 
 }
+/*-----------------------------------------------------------------------------
+
+FUNCTION: DT_Nfc_i2c_version
+
+PURPOSE:  Control the (GPIO_RESET/VEN) pin, legacy Reset Pin
+          and (SWP/FW_DL) Pin.
+
+-----------------------------------------------------------------------------*/
+int DT_Nfc_i2c_version(long field)
+{
+    HAL_TRACE_DEBUG1("I2C:DT_Nfc_i2c_version : field = %d \n", field);
+    return ioctl(I2C_Inst.DeviceFileHandle, NFCC_VERSION, field);
+}
+
 /*-----------------------------------------------------------------------------
 
 FUNCTION: DT_Nfc_set_controller_mode
