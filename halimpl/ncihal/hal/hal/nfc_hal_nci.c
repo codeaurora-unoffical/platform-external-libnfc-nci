@@ -468,7 +468,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
     UINT8 nvmupdatebuff[260]={0},nvmdatabufflen=0;
     UINT8 *nvmcmd = NULL, nvmcmdlen = 0;
     UINT32 nvm_update_flag = 0;
-    UINT32 pm_flag = 0;
+    UINT32 pm_flag = 0, region2_enable=0;
     UINT8 *p1;
 
     HAL_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg()");
@@ -501,6 +501,8 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
         if ((mt == NCI_MT_RSP && gid == NCI_GID_PROP))
         {
             nfc_hal_cb.propd_sleep = 0;
+            /*Keep Track that NFCC is sleeping */
+            nfc_hal_cb.is_sleeping = TRUE;
             nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
             nfc_hal_main_stop_quick_timer (&nfc_hal_cb.ncit_cb.nci_wait_rsp_timer);
             return FALSE;
@@ -537,6 +539,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
         if ((gid == NCI_GID_PROP)&&(op_code == NCI_MSG_PROP_SLEEP))
         {
             nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+            nfc_hal_cb.is_sleeping = TRUE;
             nfc_hal_main_stop_quick_timer (&nfc_hal_cb.ncit_cb.nci_wait_rsp_timer);
             HAL_TRACE_DEBUG0 ("NCI_MSG_PROP_SLEEP received");
         }
@@ -605,6 +608,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                 {
                     nfc_hal_cb.act_interface = NCI_INTERFACE_MAX + 1;
                     nfc_hal_cb.listen_mode_activated = FALSE;
+                    nfc_hal_cb.kovio_activated = FALSE;
                     /*check which interface is activated*/
                     if((*(p+1) == NCI_INTERFACE_NFC_DEP))
                     {
@@ -617,6 +621,11 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                             nfc_hal_cb.act_interface = NCI_INTERFACE_NFC_DEP;
                             nfc_hal_cb.listen_setConfig_rsp_cnt = 0;
                         }
+                    }
+                    if((*(p+3) == NCI_DISCOVERY_TYPE_POLL_KOVIO))
+                    {
+                        HAL_TRACE_DEBUG0 ("Kovio Tag activated");
+                        nfc_hal_cb.kovio_activated = TRUE;
                     }
                     if((*(p+3) == NCI_DISCOVERY_TYPE_LISTEN_F) ||
                        (*(p+3) == NCI_DISCOVERY_TYPE_LISTEN_A) ||
@@ -638,6 +647,8 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                     }
                     if((*(p + 1) != NCI_INTERFACE_EE_DIRECT_RF))
                     {
+                        HAL_TRACE_DEBUG0 ("wake up nfcc \n");
+                        nfc_hal_cb.is_sleeping = FALSE;
                         nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
                     }
                     else
@@ -657,6 +668,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                         if((*(p) == NCI_DEACTIVATE_TYPE_DISCOVERY) &&
                            (!nfc_hal_cb.listen_mode_activated) &&
                            ( nfc_hal_cb.act_interface != NCI_INTERFACE_EE_DIRECT_RF)
+                            &&(!nfc_hal_cb.kovio_activated)
                           )
                         {
                             nfc_hal_cb.dev_cb.nfcc_sleep_mode = 0;
@@ -711,6 +723,21 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                         p++; /* skip buff size */
                         p++; /* num of buffers */
                         nfc_hal_cb.hci_cb.hcp_conn_id = *p;
+                        }
+                    }
+                    /* TODO: Remove conf file check after test*/
+                    GetNumValue("REGION2_ENABLE", &region2_enable, sizeof(region2_enable));
+                    if(region2_enable)
+                    {
+                        if(op_code == NCI_MSG_CORE_RESET)
+                        {
+                            /*Send NciRegionControlEnable command every time after CORE_RESET cmd*/
+                            HAL_TRACE_DEBUG0 ("Sending NciRegionControlEnable command..");
+                            nfc_hal_dm_send_prop_nci_region2_control_enable_cmd(REGION2_CONTROL_ENABLE);
+                        }
+                        if(op_code == NCI_MSG_CORE_INIT)
+                        {
+                            nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
                         }
                     }
                     if(current_mode != FTM_MODE)
