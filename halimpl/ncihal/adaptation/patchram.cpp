@@ -93,6 +93,7 @@ UINT32 patch_version = 0;
 #define NFCC_VERSION_V20  20
 #define NFCC_VERSION_V21  21
 #define NFCC_VERSION_V30  30
+#define NFCC_VERSION_V24  24
 
 /* This is from the chip version register 0x00 via host */
 #define NFCC_CHIP_VERSION_REG     (0x00)
@@ -108,6 +109,7 @@ UINT32 patch_version = 0;
 #define NFCC_METAL_MASK1          (0x01)
 #define NFCC_METAL_MASK2          (0x02)
 #define NFCC_METAL_MASK3          (0x03)
+#define NFCC_METAL_MASK4          (0x04)
 
 tNFC_POST_RESET_CB nfc_post_reset_cb =
 {
@@ -796,6 +798,10 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
             {
                 patch_version = NFCC_VERSION_V21;
             }
+            if (metal_revision_id == NFCC_METAL_MASK4)
+            {
+                patch_version = NFCC_VERSION_V24;
+            }
         }
         /* Major version 3 */
         if (chip_version == NFCC_VERSION_MAJ0R_V3)
@@ -823,6 +829,7 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
         }
         case NFCC_VERSION_V30:
         case NFCC_VERSION_V21:
+        case NFCC_VERSION_V24:
         {
             ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
                        patch_len);
@@ -830,9 +837,9 @@ UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patc
             break;
         }
         default:
-        {//v2.0
+        {//v2.1 or greater
             ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
-                       patch_len-FW_VERSION_OCTETS-PATCH_OCTETS);
+                       patch_len);
             ALOGD("PATCH Version : %X %X",*(ver_ptr+2),*(ver_ptr+3));
             break;
         }
@@ -864,6 +871,8 @@ UINT8 nfc_hal_check_fw_signature(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdat
     UINT8 chip_version = 0;
     UINT8 chip_revision_id = 0;
     UINT8 metal_revision_id = 0;
+    UINT8 totallengthinfo[4] = {0};
+    UINT32 total_len=0;
 
     HAL_TRACE_DEBUG1("patch version :%d", patch_version);
 
@@ -892,6 +901,10 @@ UINT8 nfc_hal_check_fw_signature(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdat
             if (metal_revision_id == NFCC_METAL_MASK1)
             {
                 patch_version = NFCC_VERSION_V21;
+            }
+            if (metal_revision_id == NFCC_METAL_MASK4)
+            {
+                patch_version = NFCC_VERSION_V24;
             }
         }
         /* Major version 3 */
@@ -929,9 +942,8 @@ UINT8 nfc_hal_check_fw_signature(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdat
        }
        case NFCC_VERSION_V30:
        case NFCC_VERSION_V21:
+       case NFCC_VERSION_V24:
        {
-           UINT8 totallengthinfo[4] = {0};
-           UINT32 total_len=0;
            memcpy(totallengthinfo,patchdata,TOTAL_LENGTH_OCTETS);
            total_len = getlength(totallengthinfo,TOTAL_LENGTH_OCTETS);
            HAL_TRACE_DEBUG1("PATCH Update :%d",total_len);
@@ -940,10 +952,9 @@ UINT8 nfc_hal_check_fw_signature(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdat
        }
        default:
        {
-           /*1 deducted from rsplen to remove length byte*/
-           ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
-                      patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS+PUBLIC_KEY_LENGTH_OCTETS+ \
-                      public_key_len+SIGNATURE_LENGTH_OCTETS-1);
+           memcpy(totallengthinfo,patchdata,TOTAL_LENGTH_OCTETS);
+           total_len = getlength(totallengthinfo,TOTAL_LENGTH_OCTETS);
+           ver_ptr = (patchdata+total_len-SIGNATURE_LENGTH);
            break;
        }
     }
