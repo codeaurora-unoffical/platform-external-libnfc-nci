@@ -52,6 +52,10 @@
 #define PATCH_NOT_UPDATED                    3
 #define PATCH_UPDATED                        4
 
+#define NFCA_PATCHFILE_V30_LOCATION  "/system/etc/firmware/Signedrompatch_v30.bin"
+#define NFCA_PATCHFILE_V20_LOCATION  "/system/etc/firmware/Signedrompatch_v20.bin"
+#define NFCA_PATCHFILE_V21_LOCATION  "/system/etc/firmware/Signedrompatch_v21.bin"
+#define NFCA_PATCHFILE_V24_LOCATION  "/system/etc/firmware/Signedrompatch_v24.bin"
 static UINT8 nfc_hal_dm_i93_rw_cfg[NFC_HAL_I93_RW_CFG_LEN] =
 {
     NCI_PARAM_ID_I93_DATARATE,
@@ -1006,19 +1010,55 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
     UINT8 *nvmcmd = NULL;
     UINT32 patch_update_flag = 0, nvm_update_flag = 0;
     UINT32 patch_version = 0;
-    char patchfilepath[100] = {0}, prepatchfilepath[100] = {0};
+    char patchfilepath[50] = {0}, prepatchfilepath[50] = {0};
+    size_t str_len = 0;
 
     HAL_TRACE_DEBUG1 ("nfc_hal_dm_proc_msg_during_init(): init state:%d", nfc_hal_cb.dev_cb.initializing_state);
     GetNumValue("PATCH_UPDATE_ENABLE_FLAG", &patch_update_flag, sizeof(patch_update_flag));
     GetNumValue("NVM_UPDATE_ENABLE_FLAG", &nvm_update_flag, sizeof(nvm_update_flag));
-    if(GetStrValue("FW_PATCH", &patchfilepath[0], sizeof(patchfilepath)))
+    if(nfc_hal_cb.dev_cb.store_path == FALSE)
     {
-        HAL_TRACE_DEBUG1("FW_PATCH found: %s",patchfilepath);
+        /*Select patch file based on chip revision*/
+        if((nfc_hal_cb.dev_cb.nfcc_chip_version == 3) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+        {
+            /*NFCC 3.0*/
+            HAL_TRACE_DEBUG0("NFCC 3.0");
+            if(GetStrValue("FW_PATCH_30", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_30 found: %s",patchfilepath);
+            }
+        }
+        else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+        {
+            /*NFCC 2.0*/
+            HAL_TRACE_DEBUG0("NFCC 2.0");
+            if(GetStrValue("FW_PATCH_20", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_20 found: %s",patchfilepath);
+            }
+        }
+        else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 1))
+        {
+            /*NFCC 2.1*/
+            HAL_TRACE_DEBUG0("NFCC 2.1");
+            if(GetStrValue("FW_PATCH_21", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_21 found: %s",patchfilepath);
+            }
+        }
+        else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 4))
+        {
+            /*NFCC 2.4*/
+            HAL_TRACE_DEBUG0("NFCC 2.4");
+            if(GetStrValue("FW_PATCH_24", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_24 found: %s",patchfilepath);
+            }
+        }
+        /* Make this flag true so that if file is available or not , next time the patch will not be read*/
+        nfc_hal_cb.dev_cb.store_path = TRUE;
     }
-    else
-    {
-        HAL_TRACE_DEBUG0("FW_PATCH not found");
-    }
+
     if(GetStrValue("FW_PRE_PATCH", &prepatchfilepath[0], sizeof(prepatchfilepath)))
     {
         HAL_TRACE_DEBUG1("FW_PRE_PATCH found: %s",prepatchfilepath);
@@ -1086,15 +1126,53 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             {
                                 HAL_TRACE_DEBUG0("PATCH Update: Pre patch file is not available");
                             }
-
+                            HAL_TRACE_DEBUG1("patchfilepath: %s",patchfilepath);
                             nfc_hal_cb.dev_cb.patch_file_available = nfc_hal_patch_read(patchfilepath,&patchdata,&patchdatalen);
                             if(nfc_hal_cb.dev_cb.patch_file_available)
                             {
-                                HAL_TRACE_DEBUG1 ("PATCH Update: Patch file length is ==%d \n\n",patchdatalen);
+                                HAL_TRACE_DEBUG1 ("PATCH Update: Found file based on chip version . Patch file length is ==%d \n\n",patchdatalen);
                             }
                             else
                             {
-                                HAL_TRACE_DEBUG0("PATCH Update: Patch file is not available");
+                                /* case : if FW patch is not available at the path provided in the conf file.Then look for patch
+                                          at default location*/
+                                HAL_TRACE_DEBUG0("FW_PATCH path not found in config file .Reading default one");
+                                /*Select patch file based on chip revision*/
+                                if((nfc_hal_cb.dev_cb.nfcc_chip_version == 3) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+                                {
+                                    /*NFCC 3.0*/
+                                    str_len = strlen(NFCA_PATCHFILE_V30_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V30_LOCATION,str_len);
+                                }
+                                else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+                                {
+                                    /*NFCC 2.0*/
+                                    str_len = strlen(NFCA_PATCHFILE_V20_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V20_LOCATION,str_len);
+                                }
+                                else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 1))
+                                {
+                                    /*NFCC 2.1*/
+                                    str_len = strlen(NFCA_PATCHFILE_V21_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V21_LOCATION,str_len);
+                                }
+                                else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 4))
+                                {
+                                    /*NFCC 2.4*/
+                                    str_len = strlen(NFCA_PATCHFILE_V24_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V24_LOCATION,str_len);
+                                }
+
+                                nfc_hal_cb.dev_cb.patch_file_available = nfc_hal_patch_read(patchfilepath,&patchdata,&patchdatalen);
+
+                                if(nfc_hal_cb.dev_cb.patch_file_available)
+                                {
+                                    HAL_TRACE_DEBUG1 ("PATCH Update: Patch file length is ==%d \n\n",patchdatalen);
+                                }
+                                else
+                                {
+                                    HAL_TRACE_DEBUG0("PATCH Update: Patch file is not available");
+                                }
                             }
 
                             /*Check if Prepatch file is relevent for patch file if prepatch exist */
@@ -1108,7 +1186,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             {
                                 patch_update = TRUE;
                             }
-                            if(patch_update)
+                            if((patch_update == TRUE) && (nfc_hal_cb.dev_cb.patch_file_available == TRUE))
                             {
                                 /* Files validated ,start patch update process*/
                                 nfc_hal_cb.dev_cb.patch_applied = FALSE;
@@ -1120,6 +1198,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             else
                             {
                                 HAL_TRACE_DEBUG0("PATCH Update : Validation Failed, Patch Update Cancled..Doing normal Initialization");
+                                patch_update = FALSE;
                                 NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
                                 HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
                             }
