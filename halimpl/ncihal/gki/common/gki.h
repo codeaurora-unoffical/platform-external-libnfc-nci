@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -449,6 +453,7 @@ GKI_API extern void   *GKI_getlast (BUFFER_Q *);
 GKI_API extern void   *GKI_getnext (void *);
 GKI_API extern void    GKI_init_q (BUFFER_Q *);
 GKI_API extern BOOLEAN GKI_queue_is_empty(BUFFER_Q *);
+GKI_API extern UINT16  GKI_queue_length (BUFFER_Q *p_q);
 GKI_API extern void   *GKI_remove_from_queue (BUFFER_Q *, void *);
 GKI_API extern UINT16  GKI_get_pool_bufsize (UINT8);
 

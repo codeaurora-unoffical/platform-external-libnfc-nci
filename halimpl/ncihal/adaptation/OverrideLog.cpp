@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -25,7 +29,10 @@
 #include "OverrideLog.h"
 #include <cutils/properties.h>
 #include "config.h"
-#define LOG_TAG "NfcNciHal"
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#define LOG_TAG "NfcHal"
 
 
 unsigned char appl_trace_level = BT_TRACE_LEVEL_DEBUG;

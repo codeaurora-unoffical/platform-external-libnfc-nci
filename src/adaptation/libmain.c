@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2011-2012 Broadcom Corporation
  *
@@ -26,9 +30,11 @@
 #include "nfa_nv_ci.h"
 #include "config.h"
 #include "nfc_hal_nv_co.h"
-
-#define LOG_TAG "BrcmNfcNfa"
-#define PRINT(s) __android_log_write(ANDROID_LOG_DEBUG, "BrcmNci", s)
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#define LOG_TAG "NfcNfa"
+#define PRINT(s) __android_log_write(ANDROID_LOG_DEBUG, "NfcNci", s)
 #define MAX_NCI_PACKET_SIZE  259
 #define MAX_LOGCAT_LINE     4096
 static char log_line[MAX_LOGCAT_LINE];
@@ -236,53 +242,6 @@ void delete_stack_non_volatile_store (BOOLEAN forceDelete)
 
 /*******************************************************************************
 **
-** Function         verify_stack_non_volatile_store
-**
-** Description      Verify the content of all non-volatile store.
-**
-** Parameters       none
-**
-** Returns          none
-**
-*******************************************************************************/
-void verify_stack_non_volatile_store ()
-{
-    ALOGD ("%s", __FUNCTION__);
-    char filename[256], filename2[256];
-    BOOLEAN isValid = FALSE;
-
-    memset (filename, 0, sizeof(filename));
-    memset (filename2, 0, sizeof(filename2));
-    strcpy(filename2, bcm_nfc_location);
-    strncat(filename2, sNfaStorageBin, sizeof(filename2)-strlen(filename2)-1);
-    if (strlen(filename2) > 200)
-    {
-        ALOGE ("%s: filename too long", __FUNCTION__);
-        return;
-    }
-
-    sprintf (filename, "%s%u", filename2, DH_NV_BLOCK);
-    if (crcChecksumVerifyIntegrity (filename))
-    {
-        sprintf (filename, "%s%u", filename2, HC_F3_NV_BLOCK);
-        if (crcChecksumVerifyIntegrity (filename))
-        {
-            sprintf (filename, "%s%u", filename2, HC_F4_NV_BLOCK);
-            if (crcChecksumVerifyIntegrity (filename))
-            {
-                sprintf (filename, "%s%u", filename2, HC_F2_NV_BLOCK);
-                if (crcChecksumVerifyIntegrity (filename))
-                    isValid = TRUE;
-            }
-        }
-    }
-
-    if (isValid == FALSE)
-        delete_stack_non_volatile_store (TRUE);
-}
-
-/*******************************************************************************
-**
 ** Function         byte2hex
 **
 ** Description      convert a byte array to hexadecimal string
@@ -468,7 +427,7 @@ void DispHciCmd (BT_HDR *p_buf)
     }
     log_line[j] = '\0';
 
-    __android_log_write(ANDROID_LOG_DEBUG, "BrcmHciX", log_line);
+    __android_log_write(ANDROID_LOG_DEBUG, "NfcHciTx", log_line);
 }
 
 
@@ -503,7 +462,7 @@ void DispHciEvt (BT_HDR *p_buf)
     }
     log_line[j] = '\0';
 
-    __android_log_write(ANDROID_LOG_DEBUG, "BrcmHciR", log_line);
+    __android_log_write(ANDROID_LOG_DEBUG, "NfcHciRx", log_line);
 }
 
 /*******************************************************************************
@@ -531,7 +490,7 @@ void DispNciDump (UINT8 *data, UINT16 len, BOOLEAN is_recv)
     }
     line_buf[j] = '\0';
 
-    __android_log_write(ANDROID_LOG_DEBUG, (is_recv) ? "BrcmNciR": "BrcmNciX", line_buf);
+    __android_log_write(ANDROID_LOG_DEBUG, (is_recv) ? "NfcNciRx": "NfcNciTx", line_buf);
 }
 
 
@@ -563,7 +522,7 @@ void DispLLCP (BT_HDR *p_buf, BOOLEAN is_recv)
             data++;
         }
         log_line[j] = '\0';
-        __android_log_write(ANDROID_LOG_DEBUG, (is_recv) ? "BrcmLlcpR": "BrcmLlcpX", log_line);
+        __android_log_write(ANDROID_LOG_DEBUG, (is_recv) ? "NfcLlcpRx": "NfcLlcpTx", log_line);
     }
 }
 
@@ -601,7 +560,7 @@ void DispHcp (UINT8 *data, UINT16 len, BOOLEAN is_recv)
     }
     line_buf[j] = '\0';
 
-    __android_log_write(ANDROID_LOG_DEBUG, (is_recv) ? "BrcmHcpR": "BrcmHcpX", line_buf);
+    __android_log_write(ANDROID_LOG_DEBUG, (is_recv) ? "NfcHcpRx": "NfcHcpRx", line_buf);
 }
 
 void DispSNEP (UINT8 local_sap, UINT8 remote_sap, BT_HDR *p_buf, BOOLEAN is_first, BOOLEAN is_rx) {}

@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2011-2012 Broadcom Corporation
  *
@@ -48,7 +52,7 @@ void ScrLog (UINT32 trace_set_mask, const char *fmt_str, ...)
     va_start(ap, fmt_str);
     vsnprintf(buffer, BTE_LOG_MAX_SIZE, fmt_str, ap);
     va_end(ap);
-    __android_log_write(ANDROID_LOG_INFO, "BrcmNci", buffer);
+    __android_log_write(ANDROID_LOG_INFO, "NCI", buffer);
 }
 
 
@@ -73,6 +77,6 @@ void LogMsg (UINT32 trace_set_mask, const char *fmt_str, ...)
     va_end(ap);
     if (trace_type == TRACE_TYPE_ERROR)
         android_log_type = ANDROID_LOG_ERROR;
-    __android_log_write(android_log_type, "BrcmNfcNfa", buffer);
+    __android_log_write(android_log_type, "NfcNfa", buffer);
 }
 

@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -25,7 +29,10 @@ extern "C"
 }
 #include "config.h"
 
-#define LOG_TAG "NfcAdaptation"
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#define LOG_TAG "NfcAdapt"
 
 extern "C" void GKI_shutdown();
 extern void resetConfig();
@@ -120,7 +127,7 @@ void NfcAdaptation::Initialize ()
         ScrProtocolTraceFlag = num;
 
     if ( GetStrValue ( NAME_NFA_DM_CFG, (char*)nfa_dm_cfg, sizeof ( nfa_dm_cfg ) ) )
-        p_nfa_dm_cfg = ( tNFA_DM_CFG * ) &nfa_dm_cfg[0];
+        p_nfa_dm_cfg = ( tNFA_DM_CFG * )(void *) &nfa_dm_cfg[0];
 
     if ( GetNumValue ( NAME_NFA_MAX_EE_SUPPORTED, &num, sizeof ( num ) ) )
     {
@@ -130,7 +137,6 @@ void NfcAdaptation::Initialize ()
 
     initializeGlobalAppLogLevel ();
 
-    verify_stack_non_volatile_store ();
     if ( GetNumValue ( NAME_PRESERVE_STORAGE, (char*)&num, sizeof ( num ) ) &&
             (num == 1) )
         ALOGD ("%s: preserve stack NV store", __FUNCTION__);
@@ -212,7 +218,7 @@ UINT32 NfcAdaptation::NFCA_TASK (UINT32 arg)
     ALOGD ("%s: enter", func);
     GKI_run (0);
     ALOGD ("%s: exit", func);
-    return NULL;
+    return 0;
 }
 
 /*******************************************************************************
@@ -240,7 +246,7 @@ UINT32 NfcAdaptation::Thread (UINT32 arg)
 
     GKI_exit_task (GKI_get_taskid ());
     ALOGD ("%s: exit", func);
-    return NULL;
+    return 0;
 }
 
 /*******************************************************************************
@@ -343,6 +349,7 @@ void NfcAdaptation::HalOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK* p
     ALOGD ("%s", func);
     if (mHalDeviceContext)
     {
+        mHalDeviceContext->common.reserved[0] = ANDROID_MODE;
         mHalCallback = p_hal_cback;
         mHalDataCallback = p_data_cback;
         mHalDeviceContext->open (mHalDeviceContext, HalDeviceContextCallback, HalDeviceContextDataCallback);

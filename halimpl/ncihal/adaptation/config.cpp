@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2011-2012 Broadcom Corporation
  *
@@ -22,13 +26,16 @@
 #include <vector>
 #include <list>
 
-#define LOG_TAG "NfcNciHal"
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#define LOG_TAG "NfcHal"
 
 const char alternative_config_path[] = "";
 const char transport_config_path[] = "/etc/";
 
-#define config_name             "libnfc-brcm.conf"
-#define extra_config_base       "libnfc-brcm-"
+#define config_name             "nfc-nci.conf"
+#define extra_config_base       "nfc-nci-"
 #define extra_config_ext        ".conf"
 #define     IsStringValue       0x80000000
 

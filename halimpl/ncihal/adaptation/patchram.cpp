@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -21,19 +25,38 @@
 #include "userial.h"
 extern "C"
 {
+    #include <DT_Nfc_link.h>
+    #include <DT_Nfc.h>
     #include "nfc_hal_post_reset.h"
 }
 #include <string>
 #include <cutils/properties.h>
-#include "spdhelper.h"
 #include "StartupConfig.h"
-
-#define LOG_TAG "NfcNciHal"
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#define LOG_TAG "NfcHal"
+#ifndef NFCA_PATCHFILE_LOCATION
+#define NFCA_PATCHFILE_LOCATION ("/system/vendor/firmware/")
+#endif
 
 #define FW_PRE_PATCH                        "FW_PRE_PATCH"
 #define FW_PATCH                            "FW_PATCH"
 #define MAX_RF_DATA_CREDITS                 "MAX_RF_DATA_CREDITS"
 
+#define TOTAL_LENGTH_OCTETS                  4
+#define PATCH_LENGTH_OCTETS                  4
+#define FW_VERSION_OCTETS                    2
+#define PATCH_OCTETS                         2
+#define SIG_ALGORITHM_OCTETS                 1
+#define RESERVED_OCTETS                      4
+#define PUBLIC_KEY_LENGTH_OCTETS             2
+#define SIGNATURE_LENGTH_OCTETS              2
+#define PRE_PATCH_EXISTS_OCTETS              2
+#define SIGNATURE_LENGTH                     72
+#define FW_VERSION_OFFSET                    2
+#define PATCH_NOT_UPDATED                    3
+#define PATCH_UPDATED                        4
 #define MAX_BUFFER      (512)
 static char sPrePatchFn[MAX_BUFFER+1];
 static char sPatchFn[MAX_BUFFER+1];
@@ -65,6 +88,26 @@ static void mayDisableSecureElement (StartupConfig& config);
 #define NFA_APP_DEFAULT_I2C_PATCHFILE_NAME  "\0"
 #endif
 
+UINT32 patch_version = 0;
+#define NFCC_VERSION_V20  20
+#define NFCC_VERSION_V21  21
+#define NFCC_VERSION_V30  30
+
+/* This is from the chip version register 0x00 via host */
+#define NFCC_CHIP_VERSION_REG     (0x00)
+#define NFCC_CHIP_VERSION_INVALID (0xFF)
+#define NFCC_VERSION_MAJOR_MASK   (0xF0)
+#define NFCC_VERSION_MINOR_MASK   (0x0F)
+#define NFCC_VERSION_MAJOR_V2     (0x20)
+#define NFCC_VERSION_MAJ0R_V3     (0x30)
+
+#define NFCC_CHIP_REVID_REG       (0x01)
+#define NFCC_METAL_REVISION_MASK  (0x0F)
+#define NFCC_METAL_MASK0          (0x00)
+#define NFCC_METAL_MASK1          (0x01)
+#define NFCC_METAL_MASK2          (0x02)
+#define NFCC_METAL_MASK3          (0x03)
+
 tNFC_POST_RESET_CB nfc_post_reset_cb =
 {
     /* Default Patch & Pre-Patch */
@@ -76,17 +119,7 @@ tNFC_POST_RESET_CB nfc_post_reset_cb =
     /* Default UART baud rate */
     NFC_HAL_DEFAULT_BAUD,
 
-    /* Default tNFC_HAL_DEV_INIT_CFG (flags, num_xtal_cfg, {brcm_hw_id, xtal-freq, xtal-index} ) */
-    {
-        2, /* number of valid entries */
-        {
-            {0x43341000, 37400, NFC_HAL_XTAL_INDEX_37400},      // All revisions of 43341 use 37,400
-            {0x20795000, 26000, NFC_HAL_XTAL_INDEX_26000},
-            {0, 0, 0},
-            {0, 0, 0},
-            {0, 0, 0},
-        }
-    },
+    {0, 0},
 
     /* Default low power mode settings */
     NFC_HAL_LP_SNOOZE_MODE_NONE,    /* Snooze Mode          */
@@ -100,8 +133,6 @@ tNFC_POST_RESET_CB nfc_post_reset_cb =
     TRUE,                           /* debug mode for downloading patchram */
     FALSE                           /* skip downloading patchram after reinit because of patch download failure */
 };
-
-
 /*******************************************************************************
 **
 ** Function         getFileLength
@@ -133,8 +164,8 @@ static long getFileLength(FILE* fp)
 static BOOLEAN isFileExist(const char *pFilename)
 {
     FILE *pf;
-
-    if ((pf = fopen(pFilename, "r")) != NULL)
+    pf = fopen(pFilename, "r");
+    if (pf != NULL)
     {
         fclose(pf);
         return TRUE;
@@ -203,29 +234,10 @@ static void continueAfterSetSnoozeMode(tHAL_NFC_STATUS status)
 static void postDownloadPatchram(tHAL_NFC_STATUS status)
 {
     ALOGD("%s: status=%i", __FUNCTION__, status);
-    GetStrValue (NAME_SNOOZE_MODE_CFG, (char*)&gSnoozeModeCfg, sizeof(gSnoozeModeCfg));
+
     if (status != HAL_NFC_STATUS_OK)
     {
-        ALOGE("%s: Patch download failed", __FUNCTION__);
-        if (status == HAL_NFC_STATUS_REFUSED)
-        {
-            SpdHelper::setPatchAsBad();
-        }
-        else
-            SpdHelper::incErrorCount();
-
-        /* If in SPD Debug mode, fail immediately and obviously */
-        if (SpdHelper::isSpdDebug())
-            HAL_NfcPreInitDone (HAL_NFC_STATUS_FAILED);
-        else
-        {
-            /* otherwise, power cycle the chip and let the stack startup normally */
-            ALOGD("%s: re-init; don't download firmware", __FUNCTION__);
-            //stop stack from downloading firmware during next initialization
-            nfc_post_reset_cb.spd_skip_on_power_cycle = TRUE;
-            USERIAL_PowerupDevice(0);
-            HAL_NfcReInit ();
-        }
+        ALOGE("Patch download failed");
     }
     /* Set snooze mode here */
     else if (gSnoozeModeCfg.snooze_mode != NFC_HAL_LP_SNOOZE_MODE_NONE)
@@ -375,7 +387,7 @@ static void StartPatchDownload(UINT32 chipid)
     ALOGD ("%s: chipid=%lx",__FUNCTION__, chipid);
 
     char chipID[30];
-    sprintf(chipID, "%lx", chipid);
+    snprintf(chipID, 30, "%lx", chipid);
     ALOGD ("%s: chidId=%s", __FUNCTION__, chipID);
 
     readOptionalConfig(chipID);     // Read optional chip specific settings
@@ -391,11 +403,13 @@ static void StartPatchDownload(UINT32 chipid)
         /* If an I2C fix patch file was specified, then tell the stack about it */
         if (sPrePatchFn[0] != '\0')
         {
-            if ((fd = fopen(sPrePatchFn, "rb")) != NULL)
+            fd = fopen(sPrePatchFn, "rb");
+            if (fd != NULL)
             {
                 UINT32 lenPrmBuffer = getFileLength(fd);
 
-                if ((sI2cFixPrmBuf = malloc(lenPrmBuffer)) != NULL)
+                sI2cFixPrmBuf = malloc(lenPrmBuffer);
+                if (sI2cFixPrmBuf != NULL)
                 {
                     size_t actualLen = fread(sI2cFixPrmBuf, 1, lenPrmBuffer, fd);
                     if (actualLen == lenPrmBuffer)
@@ -427,26 +441,21 @@ static void StartPatchDownload(UINT32 chipid)
         if (sPatchFn[0] != '\0')
         {
             UINT32 bDownloadStarted = false;
-
+            fd = fopen(sPatchFn, "rb");
             /* open patchfile, read it into a buffer */
-            if ((fd = fopen(sPatchFn, "rb")) != NULL)
+            if (fd != NULL)
             {
                 UINT32 lenPrmBuffer = getFileLength(fd);
                 ALOGD("%s Downloading patchfile %s (size: %lu) format=%u", __FUNCTION__, sPatchFn, lenPrmBuffer, NFC_HAL_PRM_FORMAT_NCD);
                 if ((sPrmBuf = malloc(lenPrmBuffer)) != NULL)
                 {
-                    size_t actualLen = fread(sPrmBuf, 1, lenPrmBuffer, fd);
-                    if (actualLen == lenPrmBuffer)
+                    fread(sPrmBuf, lenPrmBuffer, 1, fd);
+
                     {
-                        if (!SpdHelper::isPatchBad((UINT8*)sPrmBuf, lenPrmBuffer))
-                        {
-                            /* Download patch using static memeory mode */
-                            HAL_NfcPrmDownloadStart(NFC_HAL_PRM_FORMAT_NCD, 0, (UINT8*)sPrmBuf, lenPrmBuffer, 0, prmCallback);
-                            bDownloadStarted = true;
-                        }
+                        /* Download patch using static memeory mode */
+                        HAL_NfcPrmDownloadStart(NFC_HAL_PRM_FORMAT_NCD, 0, (UINT8*)sPrmBuf, lenPrmBuffer, 0, prmCallback);
+                        bDownloadStarted = true;
                     }
-                    else
-                        ALOGE("%s fail reading patchram", __FUNCTION__);
                 }
                 else
                     ALOGE("%s Unable to buffer to hold patchram (%lu bytes)", __FUNCTION__, lenPrmBuffer);
@@ -460,8 +469,7 @@ static void StartPatchDownload(UINT32 chipid)
             if (!bDownloadStarted)
             {
                 /* If debug mode, fail in an obvious way, otherwise try to start stack */
-                postDownloadPatchram(SpdHelper::isSpdDebug() ? HAL_NFC_STATUS_FAILED :
-                        HAL_NFC_STATUS_OK);
+                postDownloadPatchram(HAL_NFC_STATUS_OK);
             }
         }
         else
@@ -484,22 +492,21 @@ static void StartPatchDownload(UINT32 chipid)
 ** Returns:     none
 **
 *******************************************************************************/
-void nfc_hal_post_reset_init (UINT32 brcm_hw_id, UINT8 nvm_type)
+void nfc_hal_post_reset_init (UINT32 hw_id, UINT8 nvm_type)
 {
-    ALOGD("%s: brcm_hw_id=0x%lx, nvm_type=%d", __FUNCTION__, brcm_hw_id, nvm_type);
+    ALOGD("%s: hw_id=0x%lu, nvm_type=%d", __FUNCTION__, hw_id, nvm_type);
     tHAL_NFC_STATUS stat = HAL_NFC_STATUS_FAILED;
     UINT8 max_credits = 1;
 
     if (nvm_type == NCI_SPD_NVM_TYPE_NONE)
     {
         ALOGD("%s: No NVM detected, FAIL the init stage to force a retry", __FUNCTION__);
-        USERIAL_PowerupDevice (0);
         stat = HAL_NfcReInit ();
     }
     else
     {
         /* Start downloading the patch files */
-        StartPatchDownload(brcm_hw_id);
+        StartPatchDownload(hw_id);
 
         if (GetNumValue(MAX_RF_DATA_CREDITS, &max_credits, sizeof(max_credits)) && (max_credits > 0))
         {
@@ -508,10 +515,402 @@ void nfc_hal_post_reset_init (UINT32 brcm_hw_id, UINT8 nvm_type)
         }
     }
 }
-
-
-/*******************************************************************************
+/**************************************************************************************************
 **
+** Function         ReadPatchFile
+**
+** Description      Read function of the available patch and prepatch file
+**
+** Returns          TRUE if operation successful
+**                  FALSE if fails
+**
+****************************************************************************************************/
+int ReadPatchFile(const char* pPatchFilePath,UINT8 **patchdata,UINT32 *patchdatalen)
+{
+    UINT32 patchdatalength  = 0,totalreadbytes=0;
+    FILE *pPatchfile        = NULL;
+    UINT8 ret = FALSE;
+
+    getNfaValues();
+
+    if((pPatchFilePath == NULL))
+    {
+        /* NULL Checks*/
+        ret = FALSE;
+    }
+    else
+    {
+        pPatchfile = fopen(pPatchFilePath,"rb");
+        if(!pPatchfile)
+        {
+            HAL_TRACE_DEBUG0("File Open Failed... No file in the directory");
+            ret = FALSE;
+            goto done;
+        }
+        else
+        {
+            /*read the length of total patch data to allocate the buffer*/
+            if(fseek(pPatchfile, 0, SEEK_END) == 0)
+            {
+                patchdatalength =  ftell(pPatchfile);
+                *patchdatalen = patchdatalength;
+                fseek(pPatchfile, 0, SEEK_SET);
+                *patchdata = (UINT8 *)malloc(patchdatalength);
+                if(!(*patchdata))
+                {
+                    /*Memory allocation failed*/
+                    HAL_TRACE_DEBUG0("Memory allocation failed for patch buffer");
+                    ret = FALSE;
+                    goto done;
+                }
+                /*Read patch data to be sent to the NFCC*/
+                totalreadbytes = fread((*patchdata),sizeof(UINT8),patchdatalength, pPatchfile);
+                if(patchdatalength != totalreadbytes)
+                {
+                    HAL_TRACE_DEBUG0("Patch data read failed");
+                    ret = FALSE;
+                    goto done;
+                }
+                HAL_TRACE_DEBUG0("Patch data read success");
+                ret = TRUE;
+                goto done;
+            }
+            else
+            {
+                /*either file is empty or corrupt*/
+                ret = FALSE;
+            }
+        }
+    }
+done:
+    if(pPatchfile)
+        fclose(pPatchfile);
+
+    return ret;
+}
+
+/**************************************************************************************************
+**
+** Function         nfc_hal_patch_read
+**
+** Description      Read function of the available patch and prepatch file
+**
+** Returns          TRUE if operation successful
+**                  FALSE if fails
+**
+****************************************************************************************************/
+int nfc_hal_patch_read(const char* pPatchFilePath,UINT8 **patchdata,UINT32 *patchdatalength)
+{
+    return ReadPatchFile(pPatchFilePath,patchdata,patchdatalength);
+}
+
+/**************************************************************************************************
+**
+** Function         getlength
+**
+** Description      Convert hex array values stored in buffer in to decimal integer number
+**
+** Returns          Return length in decimal.
+**
+****************************************************************************************************/
+UINT32 getlength(UINT8 * buffer,UINT8 len)
+{
+    UINT32 length = 0;
+    char *end;
+    UINT8 *input = buffer;
+    UINT8 str[12]={0};
+    const char * hex = "0123456789ABCDEF";
+    UINT8 * output = str;
+    int i = 0;
+    if((input == NULL) || len < 1 || len > 12)
+    {
+        return 0;
+    }
+    for(;i < len-1; ++i){
+        *output++ = hex[(*input>>4)&0xF];
+        *output++ = hex[(*input++)&0xF];
+    }
+    *output++ = hex[(*input>>4)&0xF];
+    *output++ = hex[(*input)&0xF];
+    *output = 0;
+    length = strtoul((const char*)str,&end, 16);
+    return length;
+}
+/***********************************************************************************************************
+**
+** Function         nfc_hal_patch_validate
+**
+** Description      This function will check the PrePatch file and the Patch file
+**                  in 3 important aspects of validity i.e -1)PrePatch ID 2)FW Version
+**                  3)Signature.
+**
+** Returns          TRUE if both files are valid for each other
+**                  FALSE if both file are not valid for each other
+************************************************************************************************************/
+int nfc_hal_patch_validate(UINT8 *patchdata,UINT32 patchdatalen,UINT8 *prepatchdata,UINT32 prepatchdatalen)
+{
+    UINT8 patch_update = FALSE, patchlengthinfo[4] = {0};
+    UINT8 public_key_length[2] = {0}, signature_length_info[2] = {0};
+    UINT32 public_key_length_offset = 0, signature_length_offset = 0;
+    UINT32 patch_length = 0, prepatch_length = 0;
+
+    /* find the length of prepatch data */
+    memcpy(patchlengthinfo,(prepatchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
+    HAL_TRACE_DEBUG4("patchlengthinfo[] : %X %X %X %X",patchlengthinfo[0],patchlengthinfo[1],patchlengthinfo[2],patchlengthinfo[3]);
+
+    prepatch_length = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
+    HAL_TRACE_DEBUG1("patch_length : %d",prepatch_length);
+
+    memset((void*)patchlengthinfo,0,4);
+
+    /* find the length of patch data */
+    memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
+    HAL_TRACE_DEBUG4("patchlengthinfo[] : %X %X %X %X",patchlengthinfo[0],patchlengthinfo[1],patchlengthinfo[2],patchlengthinfo[3]);
+
+    patch_length = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
+    HAL_TRACE_DEBUG1("patch_length : %d",patch_length);
+
+    /* check first if  FW version is same in both files( Patch file and prepatch file)*/
+    if(memcmp((patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS+patch_length-FW_VERSION_OCTETS-PATCH_OCTETS),(prepatchdata + \
+               TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS+prepatch_length-FW_VERSION_OCTETS-PATCH_OCTETS),FW_VERSION_OCTETS) == 0)
+    {
+        HAL_TRACE_DEBUG0("FW version is same in patch file and prepatch file");
+    }
+    else
+   {
+        HAL_TRACE_DEBUG0("FW version is not same in patch file and prepatch file");
+        return FALSE;
+   }
+
+   /* Check if Patch Version is same in both files*/
+    if(memcmp((patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS+patch_length+FW_VERSION_OCTETS-PATCH_OCTETS),(prepatchdata + \
+               TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS+prepatch_length+FW_VERSION_OCTETS-PATCH_OCTETS),PATCH_OCTETS) == 0)
+    {
+        HAL_TRACE_DEBUG0("Patch version is same in patch file and prepatch file");
+    }
+    else
+   {
+        HAL_TRACE_DEBUG0("Patch version is not same in patch file and prepatch file");
+        return FALSE;
+   }
+   return TRUE;
+}
+
+/**********************************************************************************************************
+**
+** Function         nfc_hal_check_firmware_version
+**
+** Description      Checks if the FW version on NFCC and prepatch file is compatible or not.
+**                  This will decide if the prepatch file is relevant for currently running FW or not.
+** Returns          Return length in decimal.
+**
+************************************************************************************************************/
+UINT8 nfc_hal_check_firmware_version(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT8 patchdatalen)
+{
+    UINT32 patch_len = 0;
+    UINT8 patchlengthinfo[4] = {0};
+    UINT8 *ver_ptr = NULL;
+    UINT8 chip_version = 0;
+    UINT8 chip_revision_id = 0;
+    UINT8 metal_revision_id = 0;
+
+    if(patchdata == NULL || genproprsp == NULL )
+    {
+        return FALSE;
+    }
+
+    memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
+    patch_len = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
+
+    /* First read the NFCC hardware flavour */
+    chip_version = (UINT8)DT_Get_Nfcc_Version(NFCC_CHIP_VERSION_REG);
+    chip_revision_id = (UINT8)DT_Get_Nfcc_Version(NFCC_CHIP_REVID_REG);
+    metal_revision_id = ((chip_revision_id) & (NFCC_METAL_REVISION_MASK));
+
+    /* We are unable to read from hardware directly so read from conf. file */
+    if (chip_version == NFCC_CHIP_VERSION_INVALID)
+    {
+      check_patch_version(&patch_version);
+    }
+    else
+    {
+        /* Minor version flags in chip version register NOT currently set in NFCC.
+           We're using metal revisions in chip revision ID register for sub-versions */
+        chip_version &= (NFCC_VERSION_MAJOR_MASK);
+        /* Major version 2 */
+        if (chip_version == NFCC_VERSION_MAJOR_V2)
+        {
+            if (metal_revision_id == NFCC_METAL_MASK0)
+            {
+                patch_version = NFCC_VERSION_V20;
+            }
+            if (metal_revision_id == NFCC_METAL_MASK1)
+            {
+                patch_version = NFCC_VERSION_V21;
+            }
+        }
+        /* Major version 3 */
+        if (chip_version == NFCC_VERSION_MAJ0R_V3)
+        {
+            patch_version = NFCC_VERSION_V30;
+        }
+        /* If we are reading back a different Major chip version - add future versions here..
+           As no others currently supported read from conf. file for now   */
+        if ((chip_version != NFCC_VERSION_MAJOR_V2) && (chip_version != NFCC_VERSION_MAJ0R_V3))
+        {
+            check_patch_version(&patch_version);
+        }
+    }
+    ALOGD("chip version = %d.%d\n", (chip_version>>4), metal_revision_id);
+    ALOGD("patch version selected = %d\n", patch_version);
+    switch (patch_version)
+    {
+        case NFCC_VERSION_V20:
+        {
+            HAL_TRACE_DEBUG0("PATCH Update : FW_2.0 enabled");
+            ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                       patch_len-FW_VERSION_OCTETS-PATCH_OCTETS);
+            ALOGD("PATCH Version : %X %X",*(ver_ptr+2),*(ver_ptr+3));
+            break;
+        }
+        case NFCC_VERSION_V30:
+        case NFCC_VERSION_V21:
+        {
+            ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                       patch_len);
+            ALOGD("PATCH Version : %X %X",*(ver_ptr+2),*(ver_ptr+3));
+            break;
+        }
+        default:
+        {//v2.0
+            ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                       patch_len-FW_VERSION_OCTETS-PATCH_OCTETS);
+            ALOGD("PATCH Version : %X %X",*(ver_ptr+2),*(ver_ptr+3));
+            break;
+        }
+    }
+    if((memcmp((genproprsp+FW_VERSION_OFFSET),ver_ptr ,FW_VERSION_OCTETS) == 0))
+    {
+       return TRUE;
+    }
+    else
+    {
+       return FALSE;
+    }
+}
+/**********************************************************************************************************
+**
+** Function         nfc_hal_check_patch_signature
+**
+** Description      Checks if the patch applied successfully or not.
+**
+** Returns          Return length in decimal.
+**
+************************************************************************************************************/
+UINT8 nfc_hal_check_fw_signature(UINT8 *genproprsp,UINT8 resplen,UINT8 *patchdata,UINT32 patchdatalen)
+{
+    UINT32 patch_len = 0,i=0;
+    UINT16 public_key_len = 0;
+    UINT8 patchlengthinfo[4] = {0},public_key_len_info[2]={0};
+    UINT8 *ver_ptr = NULL;
+    UINT8 chip_version = 0;
+    UINT8 chip_revision_id = 0;
+    UINT8 metal_revision_id = 0;
+
+    HAL_TRACE_DEBUG1("patch version :%d", patch_version);
+
+    /* First read the NFCC hardware flavour */
+    chip_version = (UINT8)DT_Get_Nfcc_Version(NFCC_CHIP_VERSION_REG);
+    chip_revision_id = (UINT8)DT_Get_Nfcc_Version(NFCC_CHIP_REVID_REG);
+    metal_revision_id = ((chip_revision_id) & (NFCC_METAL_REVISION_MASK));
+
+    /* We are unable to read from hardware directly so read from conf file */
+    if (chip_version == NFCC_CHIP_VERSION_INVALID)
+    {
+      check_patch_version(&patch_version);
+    }
+    else
+    {
+        /* Minor version flags in chip version register NOT currently set in NFCC.
+           We're using metal revisions in chip revision ID register for sub-versions */
+        chip_version &= (NFCC_VERSION_MAJOR_MASK);
+        /* Major version 2 */
+        if (chip_version == NFCC_VERSION_MAJOR_V2)
+        {
+            if (metal_revision_id == NFCC_METAL_MASK0)
+            {
+                patch_version = NFCC_VERSION_V20;
+            }
+            if (metal_revision_id == NFCC_METAL_MASK1)
+            {
+                patch_version = NFCC_VERSION_V21;
+            }
+        }
+        /* Major version 3 */
+        if (chip_version == NFCC_VERSION_MAJ0R_V3)
+        {
+            patch_version = NFCC_VERSION_V30;
+        }
+        /* If we are reading back a different Major chip version - add future versions here..
+           As no others currently supported read from conf. file for now   */
+        if ((chip_version != NFCC_VERSION_MAJOR_V2) && (chip_version != NFCC_VERSION_MAJ0R_V3))
+        {
+            check_patch_version(&patch_version);
+        }
+    }
+    ALOGD("CHIP_REVISION_ID = %d\n", chip_revision_id);
+    ALOGD("CHIP_VERSION = %d.%d\n", (chip_version>>4), metal_revision_id);
+
+    memcpy(patchlengthinfo,(patchdata+TOTAL_LENGTH_OCTETS),PATCH_LENGTH_OCTETS);
+    patch_len = getlength(patchlengthinfo,PATCH_LENGTH_OCTETS);
+
+    memcpy(public_key_len_info,(patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+           patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS),PUBLIC_KEY_LENGTH_OCTETS);
+
+    public_key_len = getlength(public_key_len_info,PUBLIC_KEY_LENGTH_OCTETS);
+
+    switch (patch_version)
+    {
+       case NFCC_VERSION_V20:
+       {
+           /*1 deducted from rsplen to remove length byte*/
+           ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                      patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS+PUBLIC_KEY_LENGTH_OCTETS+ \
+                      public_key_len+SIGNATURE_LENGTH_OCTETS-1);
+           break;
+       }
+       case NFCC_VERSION_V30:
+       case NFCC_VERSION_V21:
+       {
+           UINT8 totallengthinfo[4] = {0};
+           UINT32 total_len=0;
+           memcpy(totallengthinfo,patchdata,TOTAL_LENGTH_OCTETS);
+           total_len = getlength(totallengthinfo,TOTAL_LENGTH_OCTETS);
+           HAL_TRACE_DEBUG1("PATCH Update :%d",total_len);
+           ver_ptr = (patchdata+total_len-SIGNATURE_LENGTH);
+           break;
+       }
+       default:
+       {
+           /*1 deducted from rsplen to remove length byte*/
+           ver_ptr = (patchdata+TOTAL_LENGTH_OCTETS+PATCH_LENGTH_OCTETS + \
+                      patch_len+SIG_ALGORITHM_OCTETS+RESERVED_OCTETS+PUBLIC_KEY_LENGTH_OCTETS+ \
+                      public_key_len+SIGNATURE_LENGTH_OCTETS-1);
+           break;
+       }
+    }
+
+    if(memcmp((genproprsp+(resplen-SIGNATURE_LENGTH)),ver_ptr ,SIGNATURE_LENGTH) != 0)
+    {
+       return PATCH_NOT_UPDATED;
+    }
+    else
+    {
+       return PATCH_UPDATED;
+    }
+}
+/**********************************************************************************************************
+
 ** Function:        mayDisableSecureElement
 **
 ** Description:     Optionally adjust a TLV to disable secure element.  This feature
@@ -535,4 +934,9 @@ void mayDisableSecureElement (StartupConfig& config)
         ALOGD ("%s: disable 0x%02X", __FUNCTION__, (UINT8) bitmask);
         config.disableSecureElement ((UINT8) (bitmask & 0xC0));
     }
+}
+
+void check_patch_version(UINT32 *version)
+{
+   GetNumValue("PATCH_VERSION", version, sizeof(*version));
 }

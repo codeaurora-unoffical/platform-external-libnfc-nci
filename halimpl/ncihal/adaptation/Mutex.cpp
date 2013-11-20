@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -21,8 +25,10 @@
  *  Encapsulate a mutex for thread synchronization.
  *
  ******************************************************************************/
-
-#define LOG_TAG "NfcNciHal"
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#define LOG_TAG "NfcHal"
 #include "OverrideLog.h"
 #include "Mutex.h"
 #include <errno.h>
