@@ -458,20 +458,38 @@ typedef struct
 
 #define NFC_EE_DISC_OP_ADD      0
 #define NFC_EE_DISC_OP_REMOVE   1
+#define NFC_EE_DISC_OP_SAK_INFO 0x80
 typedef UINT8 tNFC_EE_DISC_OP;
 typedef struct
 {
-    tNFC_EE_DISC_OP         op;             /* add or remove this entry         */
-    UINT8                   nfcee_id;       /* NFCEE ID                         */
     tNFC_RF_TECH_N_MODE     tech_n_mode;    /* Discovery Technology and Mode    */
     tNFC_PROTOCOL           protocol;       /* NFC protocol                     */
+} tNFC_EE_DISCOVER_REQ_INFO;
+
+typedef struct
+{
+    UINT8                   sak;            /* SAK set by UICC                  */
+} tNFC_EE_DISCOVER_SAK_INFO;
+
+typedef struct
+{
+    tNFC_EE_DISC_OP         op;             /* add/remove/SAK info              */
+    UINT8                   nfcee_id;       /* NFCEE ID                         */
+    union
+    {
+        tNFC_EE_DISCOVER_REQ_INFO req_info;
+        tNFC_EE_DISCOVER_SAK_INFO sak_info;
+    } info;
 } tNFC_EE_DISCOVER_INFO;
 
 #ifndef NFC_MAX_EE_DISC_ENTRIES
 #define NFC_MAX_EE_DISC_ENTRIES     6
 #endif
-#define NFC_EE_DISCOVER_ENTRY_LEN   5 /* T, L, V(NFCEE ID, TechnMode, Protocol) */
-#define NFC_EE_DISCOVER_INFO_LEN    3 /* NFCEE ID, TechnMode, Protocol */
+#define NFC_EE_DISCOVER_REQ_ENTRY_LEN   5 /* T, L, V(NFCEE ID, TechnMode, Protocol) */
+#define NFC_EE_DISCOVER_REQ_INFO_LEN    3 /* NFCEE ID, TechnMode, Protocol */
+#define NFC_EE_SAK_ENTRY_LEN            4 /* T, L, V(NFCEE ID, SAK) */
+#define NFC_EE_SAK_INFO_LEN             2 /* NFCEE ID, SAK */
+
 /* the data type associated with NFC_EE_DISCOVER_REQ_REVT */
 typedef struct
 {

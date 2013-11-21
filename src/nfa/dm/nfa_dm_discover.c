@@ -309,31 +309,29 @@ static tNFA_STATUS nfa_dm_set_rf_listen_mode_config (tNFA_DM_DISC_TECH_PROTO_MAS
     ** If the ATQA values are 0x0000, then the FW will use 0x0400
     ** which works for ISODEP, T2T and NFCDEP.
     */
-    if (nfa_dm_cb.disc_cb.listen_RT[NFA_DM_DISC_LRT_NFC_A] == NFA_DM_DISC_HOST_ID_DH)
+
+    UINT8_TO_STREAM (p, NFC_PMID_LA_BIT_FRAME_SDD);
+    UINT8_TO_STREAM (p, NCI_PARAM_LEN_LA_BIT_FRAME_SDD);
+    UINT8_TO_STREAM (p, 0x04);
+    UINT8_TO_STREAM (p, NFC_PMID_LA_PLATFORM_CONFIG);
+    UINT8_TO_STREAM (p, NCI_PARAM_LEN_LA_PLATFORM_CONFIG);
+    UINT8_TO_STREAM (p, platform);
+
+    /* if UICC is listening on NFC-A */
+    if (nfa_dm_cb.disc_cb.listen_RT[NFA_DM_DISC_LRT_NFC_A] != NFA_DM_DISC_HOST_ID_DH)
     {
-        UINT8_TO_STREAM (p, NFC_PMID_LA_BIT_FRAME_SDD);
-        UINT8_TO_STREAM (p, NCI_PARAM_LEN_LA_BIT_FRAME_SDD);
-        UINT8_TO_STREAM (p, 0x04);
-        UINT8_TO_STREAM (p, NFC_PMID_LA_PLATFORM_CONFIG);
-        UINT8_TO_STREAM (p, NCI_PARAM_LEN_LA_PLATFORM_CONFIG);
-        UINT8_TO_STREAM (p, platform);
-        UINT8_TO_STREAM (p, NFC_PMID_LA_SEL_INFO);
-        UINT8_TO_STREAM (p, NCI_PARAM_LEN_LA_SEL_INFO);
-        UINT8_TO_STREAM (p, sens_info);
+        tNFA_EE_ECB *p_ee_ecb;
+        p_ee_ecb = nfa_ee_find_ecb (nfa_dm_cb.disc_cb.listen_RT[NFA_DM_DISC_LRT_NFC_A]);
+        if (p_ee_ecb)
+        {
+            /* add bits from SAK of UICC */
+            sens_info |= p_ee_ecb->se_sak;
+        }
     }
-    else /* Let NFCC use UICC configuration by configuring with length = 0 */
-    {
-        UINT8_TO_STREAM (p, NFC_PMID_LA_BIT_FRAME_SDD);
-        UINT8_TO_STREAM (p, 0);
-        UINT8_TO_STREAM (p, NFC_PMID_LA_PLATFORM_CONFIG);
-        UINT8_TO_STREAM (p, 0);
-        UINT8_TO_STREAM (p, NFC_PMID_LA_SEL_INFO);
-        UINT8_TO_STREAM (p, 0);
-        UINT8_TO_STREAM (p, NFC_PMID_LA_NFCID1);
-        UINT8_TO_STREAM (p, 0);
-        UINT8_TO_STREAM (p, NFC_PMID_LA_HIST_BY);
-        UINT8_TO_STREAM (p, 0);
-    }
+
+    UINT8_TO_STREAM (p, NFC_PMID_LA_SEL_INFO);
+    UINT8_TO_STREAM (p, NCI_PARAM_LEN_LA_SEL_INFO);
+    UINT8_TO_STREAM (p, sens_info);
 
     /* for Listen B */
     if (nfa_dm_cb.disc_cb.listen_RT[NFA_DM_DISC_LRT_NFC_B] == NFA_DM_DISC_HOST_ID_DH)
@@ -405,23 +403,47 @@ static tNFA_STATUS nfa_dm_set_rf_listen_mode_config (tNFA_DM_DISC_TECH_PROTO_MAS
 ** Returns          void
 **
 *******************************************************************************/
-static void nfa_dm_set_qnci_params (void)
+static void nfa_dm_set_qnci_params (UINT8 uicc_listen_mask, UINT8 p2p_listen_mask)
 {
     UINT8 params[200], *p;
     UINT8 lf_t3t_identifier[NFA_LF_MAX_SC_NFCID2][NCI_SYSTEMCODE_LEN + NCI_NFCID2_LEN];
     UINT32 nfcf_listenmask = 0;
+    UINT8 sak = 0;
 
     NFA_TRACE_DEBUG0 ("nfa_dm_set_nci_params ()");
 
     p = params;
 
+    /* set SAK according to Tech supported by UICC, UICC listen mask, P2P listen mask */
+    if((nfa_ee_cb.se_prot_flag & uicc_listen_mask) & NFC_TECH_A)
+    {
+        tNFA_EE_ECB *p_ee_ecb;
+        p_ee_ecb = nfa_ee_find_ecb (0x01); /* hardcode as temp */
+        if (p_ee_ecb)
+        {
+            /* add bits from SAK of UICC */
+            sak |= p_ee_ecb->se_sak;
+        }
+    }
+    if (p2p_listen_mask & NFC_TECH_A)
+    {
+        sak |= 0x40;
+    }
+
     UINT8_TO_STREAM (p, NFC_PMID_LA_SEL_INFO);
     UINT8_TO_STREAM (p, 0x01);
-    UINT8_TO_STREAM (p, 0x60);
+    UINT8_TO_STREAM (p, sak);
 
     UINT8_TO_STREAM (p, NFC_PMID_LB_SENSB_INFO);
     UINT8_TO_STREAM (p, 0x01);
-    UINT8_TO_STREAM (p, 0x01);
+    if((nfa_ee_cb.se_prot_flag & uicc_listen_mask) & NFC_TECH_B)
+    {
+        UINT8_TO_STREAM (p, 0x01);
+    }
+    else
+    {
+        UINT8_TO_STREAM (p, 0x00);
+    }
 
     UINT8_TO_STREAM (p, NFC_PMID_NFC_DEP_OP);
     UINT8_TO_STREAM (p, 0x01);
@@ -1204,125 +1226,36 @@ void nfa_dm_start_rf_discover (void)
 
     NFA_TRACE_DEBUG2 ("num_params = %d :  nfa_ee_cb.se_prot_flag=0x%x", num_params, nfa_ee_cb.se_prot_flag);
 
-    if(nfa_ee_cb.se_prot_flag != FALSE)
+    GetNumValue(NAME_UICC_LISTEN_TECH_MASK, &listenmask, sizeof(listenmask));
+    NFA_TRACE_DEBUG1 ("UICC_LISTEN_TECH_MASK = 0x%x", listenmask);
+
+    if ((nfa_ee_cb.se_prot_flag != 0x00)&&(listenmask != 0x00))
     {
         /*check if A or F listen is set already for P2P*/
         GetNumValue("P2P_LISTEN_TECH_MASK", &p2p_listen_mask, sizeof(p2p_listen_mask));
+        NFA_TRACE_DEBUG1 ("P2P_LISTEN_TECH_MASK = 0x%x", p2p_listen_mask);
+
         NFA_TRACE_DEBUG0 ("NFCEE disc req ntf arrived.Setting RF discovery again");
-        if((nfa_ee_cb.se_prot_flag & NFC_TECH_A) && (!(p2p_listen_mask & NFC_TECH_A)))
+        if(((nfa_ee_cb.se_prot_flag & listenmask) & NFC_TECH_A) && (!(p2p_listen_mask & NFC_TECH_A)))
         {
             NFA_TRACE_DEBUG0("NFA SET DISC: Enabling NFC-A listen");
             disc_params[num_params].type      = NFC_A_PASSIVE_LISTEN_MODE;
             disc_params[num_params].frequency = 1;
             num_params += 1 ;
         }
-        if(nfa_ee_cb.se_prot_flag & NFC_TECH_B)
+        if((nfa_ee_cb.se_prot_flag & listenmask) & NFC_TECH_B)
         {
             NFA_TRACE_DEBUG0("NFA SET DISC: Enabling NFC-B listen");
             disc_params[num_params].type      = NFC_B_PASSIVE_LISTEN_MODE;
             disc_params[num_params].frequency = 1;
             num_params += 1 ;
         }
-        if((nfa_ee_cb.se_prot_flag & NFC_TECH_F) && (!(p2p_listen_mask & NFC_TECH_F)))
+        if(((nfa_ee_cb.se_prot_flag & listenmask) & NFC_TECH_F) && (!(p2p_listen_mask & NFC_TECH_F)))
         {
             NFA_TRACE_DEBUG0("NFA SET DISC: Enabling NFC-F listen");
             disc_params[num_params].type      = NFC_F_PASSIVE_LISTEN_MODE;
             disc_params[num_params].frequency = 1;
             num_params += 1 ;
-        }
-        nfa_ee_cb.se_prot_flag = 0x00; // reset flag once op completed.
-    }
-    else
-    {
-        if( GetNumValue(NAME_UICC_LISTEN_TECH_MASK, &listenmask, sizeof(listenmask)) )
-        {
-            NFA_TRACE_DEBUG0("NFA SET DISC: NAME_UICC_LISTEN_TECH_MASK found");
-            if(listenmask != 0)
-            {
-                if( GetNumValue("P2P_LISTEN_TECH_MASK", &p2p_listen_mask, sizeof(p2p_listen_mask)) )
-                {
-                    if(p2p_listen_mask == 0x05)
-                    {
-                        /* NFC-A and NFC-F listen is already enabled.Enable NFC-B listen now*/
-                        disc_params[num_params].type      = NFC_B_PASSIVE_LISTEN_MODE;
-                        disc_params[num_params].frequency = 1;
-                        num_params +=1 ;
-                    }
-                    else if(p2p_listen_mask == 0x04)
-                    {
-                        /*NFC-F listen is already enabled.Enable NFC-A and NFC-Blisten now*/
-                         disc_params[num_params].type        = NFC_A_PASSIVE_LISTEN_MODE;
-                         disc_params[num_params].frequency   = 1;
-                         disc_params[num_params+1].type      = NFC_B_PASSIVE_LISTEN_MODE;
-                         disc_params[num_params+1].frequency = 1;
-                         num_params +=2 ;
-                    }
-                    else if(p2p_listen_mask == 0x01)
-                    {
-                         /*NFC-A listen is already enabled.Enable NFC-B and NFC-F listen now*/
-                         disc_params[num_params].type        = NFC_B_PASSIVE_LISTEN_MODE;
-                         disc_params[num_params].frequency   = 1;
-                         disc_params[num_params+1].type      = NFC_F_PASSIVE_LISTEN_MODE;
-                         disc_params[num_params+1].frequency = 1;
-                         num_params += 2 ;
-                    }
-                    else
-                    {
-                        NFA_TRACE_DEBUG0("NFA SET DISC: P2P listen tech mask is not properly set.");
-                        p2p_listen_mask = 0x00;
-                    }
-                }
-                else
-                {
-                    NFA_TRACE_DEBUG0("NFA SET DISC: P2P listen tech mask is not present");
-                    p2p_listen_mask = 0x00;
-                }
-
-                if(p2p_listen_mask == 0x00)
-                {
-                    if(listenmask  == NFA_TECHNOLOGY_MASK_DEFAULT_LISTEN)
-                    {
-                        NFA_TRACE_DEBUG0("NFA SET DISC: Default Listen config found...(Listen A and F)");
-                        /*set the listen tech , mode and freq for listen discovery*/
-                        disc_params[num_params].type        = NFC_A_PASSIVE_LISTEN_MODE;
-                        disc_params[num_params].frequency   = 1;
-                        disc_params[num_params+1].type      = NFC_B_PASSIVE_LISTEN_MODE;
-                        disc_params[num_params+1].frequency = 1;
-                        disc_params[num_params+2].type      = NFC_F_PASSIVE_LISTEN_MODE;
-                        disc_params[num_params+2].frequency = 1;
-                        num_params += 3 ;
-                    }
-                    else
-                    {
-                        if((listenmask & NFA_TECHNOLOGY_MASK_A) == NFA_TECHNOLOGY_MASK_A)
-                        {
-                            NFA_TRACE_DEBUG0("NFA SET DISC: NFC-A listen tech found");
-                            disc_params[num_params].type      = NFC_A_PASSIVE_LISTEN_MODE;
-                            disc_params[num_params].frequency = 1;
-                            num_params += 1 ;
-                        }
-                        if((listenmask & NFA_TECHNOLOGY_MASK_B) == NFA_TECHNOLOGY_MASK_B)
-                        {
-                            NFA_TRACE_DEBUG0("NFA SET DISC: NFC-B listen tech found");
-                            /*set the listen tech , mode and freq for listen discovery*/
-                            disc_params[num_params].type      = NFC_B_PASSIVE_LISTEN_MODE;
-                            disc_params[num_params].frequency = 1;
-                            num_params += 1 ;
-                         }
-                         if((listenmask & NFA_TECHNOLOGY_MASK_F) == NFA_TECHNOLOGY_MASK_F)
-                         {
-                             NFA_TRACE_DEBUG0("NFA SET DISC: NFC-F listen tech found");
-                             disc_params[num_params].type      = NFC_F_PASSIVE_LISTEN_MODE;
-                             disc_params[num_params].frequency = 1;
-                             num_params += 1 ;
-                         }
-                         else
-                         {
-                             NFA_TRACE_DEBUG0("NFA SET DISC: No proper mask found for listen technology");
-                         }
-                     }
-                }
-            }
         }
     }
 
@@ -1340,8 +1273,14 @@ void nfa_dm_start_rf_discover (void)
             /* update listening protocols in each NFC technology */
             nfa_dm_set_rf_listen_mode_config (dm_disc_mask);
         }
-        nfa_dm_set_qnci_params();
+
+        if ((nfa_ee_cb.se_prot_flag != 0x00)&&(listenmask != 0x00))
+        {
+            nfa_dm_set_qnci_params (listenmask, p2p_listen_mask);
+            nfa_ee_cb.se_prot_flag = 0x00; // reset flag once op completed.
+        }
         nfa_dm_set_default_listen_mode_routing_table();
+
         /* Set polling duty cycle */
         nfa_dm_set_total_duration ();
         nfa_dm_cb.disc_cb.dm_disc_mask = dm_disc_mask;
