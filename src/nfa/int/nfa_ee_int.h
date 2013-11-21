@@ -163,6 +163,7 @@ typedef struct
     tNFA_NFC_PROTOCOL       lb_protocol;        /* Listen B protocol    */
     tNFA_NFC_PROTOCOL       lf_protocol;        /* Listen F protocol    */
     tNFA_NFC_PROTOCOL       lbp_protocol;       /* Listen B' protocol   */
+    UINT8                   se_sak;             /* SAK setting by UICC  */
 } tNFA_EE_ECB;
 
 /* data type for NFA_EE_API_DISCOVER_EVT */
