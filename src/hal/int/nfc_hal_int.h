@@ -160,8 +160,11 @@ extern NFC_HAL_TRANS_CFG_QUALIFIER tNFC_HAL_TRANS_CFG nfc_hal_trans_cfg;
 #define ERROR                                 3
 #define REGION2_CONTROL_DISABLE               0
 #define REGION2_CONTROL_ENABLE                1
-#define STORE_INFO                            1
-#define REMOVE_INFO                           0
+#define STORE_INFO_DEBUG_ENABLE               '1'
+#define DEVICE_POWER_CYCLED                   '0'
+#define REMOVE_INFO                           '0'
+#define STROE_INFO_NFC_DISABLED               '2'
+#define NFCSERVICE_WATCHDOG_TIMER_EXPIRED     '4'
 
 /****************************************************************************************
 ** Internal constants and definitions
@@ -543,6 +546,9 @@ void nfc_hal_dm_shutting_down_nfcc (void);
 BOOLEAN nfc_hal_dm_power_mode_execute (tNFC_HAL_LP_EVT event);
 void nfc_hal_dm_send_pend_cmd (void);
 tHAL_NFC_STATUS nfc_hal_dm_set_config (UINT8 tlv_size, UINT8 *p_param_tlvs, tNFC_HAL_NCI_CBACK *p_cback);
+void nfc_hal_store_info(UINT8 operation);
+void nfc_hal_dm_send_prop_nci_region2_enable_cmd(UINT8 debaug_status);
+char nfc_hal_retrieve_info(void);
 
 /* nfc_hal_prm.c */
 void nfc_hal_prm_spd_reset_ntf (UINT8 reset_reason, UINT8 reset_type);

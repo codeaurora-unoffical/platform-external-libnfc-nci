@@ -57,6 +57,7 @@
 #endif
 extern UINT8 appl_trace_level;
 extern char current_mode;
+extern UINT8 reset_status;
 /* Mapping of USERIAL_PORT_x to linux */
 extern UINT32 ScrProtocolTraceFlag;
 static int current_nfc_wake_state = 0;
@@ -225,6 +226,9 @@ static DT_Nfc_sConfig_t         DriverConfig;
 void                            *pdTransportHandle;
 
 static sem_t                    data_available;
+extern char shut_down_reason;
+#define NFC_DISABLED_FROM_UI            1
+#define NFC_DISABLED_BY_AIRPLANEMODE    2
 
 /*******************************************************************************
 **
@@ -985,12 +989,13 @@ void userial_io_init_bt_wake( int fd, unsigned long * p_wake_state )
 NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportHandle, void (*nci_cb) )
 {
    NFC_RETURN_CODE retstatus = NFC_SUCCESS;
-   UINT16 chip_version;
+   UINT16 chip_version, region2_info = 0;
    UINT16 chip_revid;
    UINT16 chip_version_major = 0;
    UINT16 metal_version = 0;
    UINT16 Cfg;
-
+   UINT32 debug_enable = 0;
+   UINT8 stored_restart_reson = 0;
    /* if userial_close_thread() is waiting to run; let it go first;
       let it finish; then continue this function */
 
@@ -1081,6 +1086,26 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
         HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open : NFC Init Semaphore creation Error");
         retstatus = NFC_FAILED;
         goto done_open;
+   }
+   HAL_TRACE_DEBUG1 ("DT_Nfc_Open().Checking Device reset status.... reset_status = %d",reset_status);
+   stored_restart_reson = nfc_hal_retrieve_info();
+   HAL_TRACE_DEBUG1 ("DT_Nfc_Open().stored_restart_reson = %d",stored_restart_reson);
+
+   if((reset_status == TRUE) && (stored_restart_reson != NFCSERVICE_WATCHDOG_TIMER_EXPIRED))
+   {
+       DT_Set_Power(1);
+       GKI_delay(100);
+       DT_Set_Power(0);
+       /* Invoke kernel routine to re-initialise NFCC as ALL config will be lost */
+       retstatus = DT_Set_Power(2);
+       if (retstatus != NFC_SUCCESS)
+       {
+           HAL_TRACE_DEBUG0 ("DT:DT_Nfc_Open : can't initialise NFCC hardware");
+           retstatus = NFC_FAILED;
+           goto done_open;
+       }
+       nfc_hal_store_info(REMOVE_INFO);
+       GKI_delay(100);
    }
 
 #ifndef REGION2_DEBUG
@@ -1264,6 +1289,16 @@ UDRV_API UINT16  DT_Nfc_Write(tUSERIAL_PORT port, UINT8 *p_data, UINT16 len)
             DT_Nfc_set_controller_mode(0);
         }
     }
+    if ((p_data[0] == 0x2F) && (p_data[1]==0x03) && (p_data[2]== 0x00)) /* sleep cmd */
+    {
+        if(nfc_hal_cb.dev_cb.nfcc_sleep_mode != 1)
+        {
+            /*Since wake to be done but last time DH has not sent wake up so set nfcc_sleep_mode to
+              so wake up can be done*/
+            HAL_TRACE_DEBUG0("nfc_hal_cb.dev_cb.nfcc_sleep_mode = 1");
+            nfc_hal_cb.dev_cb.nfcc_sleep_mode = 1;
+        }
+    }
     while (len != 0 && linux_cb.sock != -1)
     {
         ret = write(linux_cb.sock, p_data + total, len);
@@ -1331,6 +1366,7 @@ UDRV_API void USERIAL_SetPowerOffDelays(int pre_poweroff_delay, int post_powerof
 *******************************************************************************/
 void DT_Nfc_Close(DT_Nfc_sConfig_t *pDriverConfig)
 {
+    UINT32 debug_enable = 0,region2_enable = 0;
     pthread_attr_t attr;
     pthread_t      close_thread;
 
@@ -1347,8 +1383,80 @@ void DT_Nfc_Close(DT_Nfc_sConfig_t *pDriverConfig)
         // make thread detached, no other thread will join
         pthread_attr_init(&attr);
         pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-        HAL_TRACE_DEBUG0("*****ENABLE DISABLE_PIN HIGH.. *******");
-        DT_Set_Power(1);
+
+
+        if((shut_down_reason == NFC_DISABLED_FROM_UI) || (shut_down_reason == NFC_DISABLED_BY_AIRPLANEMODE))
+        {
+            GetNumValue("REGION2_DEBUG_ENABLE_FLAG", &debug_enable, sizeof(debug_enable));
+            if((debug_enable == TRUE) && (shut_down_reason != NFC_DISABLED_BY_AIRPLANEMODE))
+            {
+                HAL_TRACE_DEBUG0("User Disabled NFC..Region 2 Debug ON ..Sending region2 eable command");
+
+                if(current_mode != FTM_MODE)
+                {
+                    /* Send region2_enable cmd with debug disable first to send chip in region2 After the
+                       chip has gone in region2 then region 2 enable command with debug on can be sent*/
+                    nfc_hal_dm_send_prop_nci_region2_enable_cmd(REGION2_DEBUG_DISABLE);
+                    if(nfc_hal_cb.dev_cb.nfcc_sleep_mode != 1)
+                    {
+                        /*Since wake to be done but last stime DH has not sent wake up so set nfcc_sleep_mode to
+                          so wake up can be done*/
+                        HAL_TRACE_DEBUG0("nfc_hal_cb.dev_cb.nfcc_sleep_mode = 1");
+                        nfc_hal_cb.dev_cb.nfcc_sleep_mode = 1;
+                    }
+                    nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
+                    GKI_delay(10);
+                    nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                    nfc_hal_dm_send_prop_nci_region2_enable_cmd(REGION2_DEBUG_ENABLE);
+
+                    /*Store this information that NFCC has gone in region 2 in /data/nfc/*/
+                    nfc_hal_store_info(STORE_INFO_DEBUG_ENABLE);
+                    nfc_hal_cb.wait_sleep_rsp = FALSE;
+                }
+            }
+            else
+            {
+                HAL_TRACE_DEBUG0("***** User Disabled NFC :Region 2 Debug OFF :  Send Sleep cmd *******");
+                /*Store this information that NFCC has been disabled from settings UI in /data/nfc/*/
+                nfc_hal_store_info(STROE_INFO_NFC_DISABLED);
+                nfc_hal_dm_set_nfc_wake (NFC_HAL_DEASSERT_NFC_WAKE);
+                nfc_hal_cb.propd_sleep = 1;
+            }
+        }
+        else if(shut_down_reason == NFCSERVICE_WATCHDOG_TIMER_EXPIRED)
+        {
+            HAL_TRACE_DEBUG0(" nfc service watchdog timer expired..store info");
+            nfc_hal_store_info(NFCSERVICE_WATCHDOG_TIMER_EXPIRED);
+        }
+        else
+        {
+            /*Shut down reason is other than disable from UI or airplanemode ON so send region 2 enable command*/
+            /* Check if Region2 enable in libnfc-nci.conf file*/
+            GetNumValue("REGION2_ENABLE", &region2_enable, sizeof(region2_enable));
+            if(region2_enable)
+            {
+                if(current_mode != FTM_MODE)
+                {
+                    HAL_TRACE_DEBUG0("NFC enabled..Device being shut down..sending region2 enable command");
+
+                    /* Send region2_enable cmd with debug disable first to send chip in region2 After the
+                       chip has gone in region2 then region 2 enable command with debug on can be sent*/
+
+                    nfc_hal_dm_send_prop_nci_region2_enable_cmd(REGION2_DEBUG_DISABLE);
+                    GetNumValue("REGION2_DEBUG_ENABLE_FLAG", &debug_enable, sizeof(debug_enable));
+                    if(debug_enable)
+                    {
+                        nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                        nfc_hal_dm_send_prop_nci_region2_enable_cmd(REGION2_DEBUG_ENABLE);
+                        /*If region 2 debug is disabled then write 2 in nv file*/
+                    }
+
+                    /*Store this information that NFCC has gone in region 2 in /data/nfc/*/
+                    nfc_hal_store_info(DEVICE_POWER_CYCLED);
+                    nfc_hal_cb.wait_sleep_rsp = FALSE;
+               }
+            }
+        }
         pthread_create( &close_thread, &attr, (void *)DT_Nfc_close_thread, (void*)pDriverConfig);
         pthread_attr_destroy(&attr);
 

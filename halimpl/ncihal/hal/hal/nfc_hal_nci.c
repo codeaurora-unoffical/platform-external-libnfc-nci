@@ -201,7 +201,7 @@ static BOOLEAN nfc_hal_nci_receive_nci_msg (tNFC_HAL_NCIT_CB *p_cb)
                p_cb->p_rcv_msg->len    = 0;
                p_cb->p_rcv_msg->event  = 0;
                p_cb->p_rcv_msg->offset = 0;
-               p_cb->rcv_len = 255;/* max payload size= 252 + 3 bytes header*/
+               p_cb->rcv_len = 255;
                /* Read in the rest of the message */
                len = DT_Nfc_Read(USERIAL_NFC_PORT, ((UINT8 *) (p_cb->p_rcv_msg + 1) + p_cb->p_rcv_msg->offset + p_cb->p_rcv_msg->len),  p_cb->rcv_len);
                p_cb->p_rcv_msg->len    = len;
@@ -713,6 +713,17 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                             if (*p  == 0x00) //status good
                             {
                                 nfc_hal_dm_send_prop_sleep_cmd ();
+                                nfc_hal_cb.propd_sleep = 1;
+                                nfc_hal_cb.init_sleep_done = 1;
+                            }
+                        }
+                        if ( (op_code == NCI_MSG_RF_DEACTIVATE) && (*p  == 0x00))
+                        {
+                            if (nfc_hal_cb.deact_type == 0x00)
+                            {
+                                HAL_TRACE_DEBUG0 ("NCI_MSG_RF_DEACTIVATE RSP in IDLE..send sleep");
+                                nfc_hal_dm_send_prop_sleep_cmd ();
+                                nfc_hal_cb.propd_sleep = 1;
                                 nfc_hal_cb.init_sleep_done = 1;
                             }
                         }
@@ -758,19 +769,21 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
                         nfc_hal_cb.hci_cb.hcp_conn_id = *p;
                     }
                 }
-                /* TODO: Remove conf file check after test*/
-                GetNumValue("REGION2_ENABLE", &region2_enable, sizeof(region2_enable));
-                if(region2_enable)
+                if(current_mode != FTM_MODE)
                 {
-                    if(op_code == NCI_MSG_CORE_RESET)
+                    GetNumValue("REGION2_ENABLE", &region2_enable, sizeof(region2_enable));
+                    if(region2_enable)
                     {
-                        /*Send NciRegionControlEnable command every time after CORE_RESET cmd*/
-                        HAL_TRACE_DEBUG0 ("Sending NciRegionControlEnable command..");
-                        nfc_hal_dm_send_prop_nci_region2_control_enable_cmd(REGION2_CONTROL_ENABLE);
-                    }
-                    if(op_code == NCI_MSG_CORE_INIT)
-                    {
-                        nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                        if(op_code == NCI_MSG_CORE_RESET)
+                        {
+                            /*Send NciRegionControlEnable command every time after CORE_RESET cmd*/
+                            HAL_TRACE_DEBUG0 ("Sending NciRegionControlEnable command..");
+                            nfc_hal_dm_send_prop_nci_region2_control_enable_cmd(REGION2_CONTROL_ENABLE);
+                        }
+                        if(op_code == NCI_MSG_CORE_INIT)
+                        {
+                            nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
+                        }
                     }
                 }
                 if(current_mode != FTM_MODE)

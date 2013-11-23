@@ -72,6 +72,9 @@ tNFC_CB nfc_cb;
 #define NFC_NUM_INTERFACE_MAP   1
 #endif
 
+extern UINT8 shutingdown_reason;
+extern UINT8 reset_status;
+
 static const tNCI_DISCOVER_MAPS nfc_interface_mapping[NFC_NUM_INTERFACE_MAP] =
 {
     /* Protocols that use Frame Interface do not need to be included in the interface mapping */
@@ -281,7 +284,7 @@ void nfc_enabled (tNFC_STATUS nfc_status, BT_HDR *p_init_rsp_msg)
             if (nfc_cb.nfc_state == NFC_STATE_CORE_INIT)
             {
                 /* report status after closing HAL */
-                nfc_cb.p_hal->close ();
+                nfc_cb.p_hal->close (shutingdown_reason);
                 return;
             }
             else
@@ -684,7 +687,7 @@ tNFC_STATUS NFC_Enable (tNFC_RESPONSE_CBACK *p_cback)
 
     /* Open HAL transport. */
     nfc_set_state (NFC_STATE_W4_HAL_OPEN);
-    nfc_cb.p_hal->open (nfc_main_hal_cback, nfc_main_hal_data_cback);
+    nfc_cb.p_hal->open (nfc_main_hal_cback, nfc_main_hal_data_cback, reset_status);
 
     return (NFC_STATUS_OK);
 }
@@ -1261,7 +1264,7 @@ tNFC_STATUS NFC_SetPowerOffSleep (BOOLEAN enable)
 
         /* open transport */
         nfc_set_state (NFC_STATE_W4_HAL_OPEN);
-        nfc_cb.p_hal->open (nfc_main_hal_cback, nfc_main_hal_data_cback);
+        nfc_cb.p_hal->open (nfc_main_hal_cback, nfc_main_hal_data_cback, reset_status);
 
         return NFC_STATUS_OK;
     }
