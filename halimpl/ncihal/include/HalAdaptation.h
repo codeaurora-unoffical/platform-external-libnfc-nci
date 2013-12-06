@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -39,7 +43,7 @@ typedef struct
     //below declarations are private variables within Broadcom HAL
     void* data;
 }
-bcm2079x_dev_t;
+nfc_dev_t;
 
 
 /*
@@ -49,16 +53,16 @@ All functions return POSIX error codes (see errno):
 */
 
 
-extern int HaiInitializeLibrary (const bcm2079x_dev_t* device);
+extern int HaiInitializeLibrary (const nfc_dev_t* device);
 extern int HaiTerminateLibrary ();
-extern int HaiOpen (const bcm2079x_dev_t* device, nfc_stack_callback_t* halCallbackFunc, nfc_stack_data_callback_t* halDataCallbackFunc);
-extern int HaiClose (const bcm2079x_dev_t* device);
-extern int HaiCoreInitialized (const bcm2079x_dev_t* device, uint8_t* coreInitResponseParams);
-extern int HaiWrite (const bcm2079x_dev_t* dev, uint16_t dataLen, const uint8_t* data);
-extern int HaiPreDiscover (const bcm2079x_dev_t* device);
-extern int HaiControlGranted (const bcm2079x_dev_t* device);
-extern int HaiPowerCycle (const bcm2079x_dev_t* device);
-extern int HaiGetMaxNfcee (const bcm2079x_dev_t* device, uint8_t* maxNfcee);
+extern int HaiOpen (const nfc_dev_t* device, nfc_stack_callback_t* halCallbackFunc, nfc_stack_data_callback_t* halDataCallbackFunc, char mode);
+extern int HaiClose (const nfc_dev_t* device);
+extern int HaiCoreInitialized (const nfc_dev_t* device, uint8_t* coreInitResponseParams);
+extern int HaiWrite (const nfc_dev_t* dev, uint16_t dataLen, const uint8_t* data);
+extern int HaiPreDiscover (const nfc_dev_t* device);
+extern int HaiControlGranted (const nfc_dev_t* device);
+extern int HaiPowerCycle (const nfc_dev_t* device);
+extern int HaiGetMaxNfcee (const nfc_dev_t* device, uint8_t* maxNfcee);
 
 
 #ifdef __cplusplus

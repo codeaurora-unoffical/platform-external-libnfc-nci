@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012-2013 Broadcom Corporation
  *
@@ -248,7 +252,8 @@ void nfc_hal_hci_fake_adm_notify_all_pipe_cleared_to_dh (void)
     HAL_TRACE_DEBUG1 ("nfc_hal_hci_fake_adm_notify_all_pipe_cleared_to_dh (): Fake ADM_NOTIFY_ALL_PIPE_CLEARED (0x%02x) from HAL", NFC_HAL_HCI_HOST_ID_UICC1);
 
     /* Start of new message. Allocate a buffer for message */
-    if ((p_msg = (NFC_HDR *) GKI_getpoolbuf (NFC_HAL_NCI_POOL_ID)) != NULL)
+    p_msg = (NFC_HDR *) GKI_getpoolbuf (NFC_HAL_NCI_POOL_ID);
+    if (p_msg != NULL)
     {
         /* Initialize NFC_HDR */
         p_msg->len    = NCI_DATA_HDR_SIZE + 0x03;

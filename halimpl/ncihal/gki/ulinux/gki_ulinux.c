@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -313,7 +317,7 @@ UINT8 GKI_create_task (TASKPTR task_entry, UINT8 task_id, INT8 *taskname, UINT16
 ** Returns          void
 **
 *******************************************************************************/
-#define WAKE_LOCK_ID "brcm_nfca"
+#define WAKE_LOCK_ID "nci_nfca"
 
 void GKI_shutdown(void)
 {
@@ -374,7 +378,7 @@ void GKI_shutdown(void)
 #endif
     if (gki_cb.os.gki_timer_wake_lock_on)
     {
-        GKI_TRACE_0("GKI_shutdown :  release_wake_lock(brcm_btld)");
+        GKI_TRACE_0("GKI_shutdown :  release_wake_lock(ncihal_btld)");
         release_wake_lock(WAKE_LOCK_ID);
         gki_cb.os.gki_timer_wake_lock_on = 0;
     }
@@ -400,7 +404,7 @@ void gki_system_tick_start_stop_cback(BOOLEAN start)
 {
     tGKI_OS         *p_os = &gki_cb.os;
     volatile int    *p_run_cond = &p_os->no_timer_suspend;
-    volatile static int wake_lock_count;
+    static volatile int wake_lock_count;
     if ( FALSE == start )
     {
         /* this can lead to a race condition. however as we only read this variable in the timer loop
@@ -489,7 +493,7 @@ void GKI_run (void *p_task_id)
 {
     GKI_TRACE_1("%s enter", __func__);
     int retval = EACCES;
-    static pthread_t workerThreadId = NULL;
+    static pthread_t workerThreadId = 0;
 
     retval = pthread_create (&workerThreadId, NULL, GKI_run_worker_thread, NULL);
     if (retval != 0)
@@ -666,30 +670,10 @@ UINT16 GKI_wait (UINT16 flag, UINT32 timeout)
     /* protect OSWaitEvt[rtask] from modification from an other thread */
     pthread_mutex_lock(&gki_cb.os.thread_evt_mutex[rtask]);
 
-#if 0 /* for clean scheduling we probably should always call pthread_cond_wait() */
-    /* Check if anything in any of the mailboxes. There is a potential race condition where OSTaskQFirst[rtask]
-     has been modified. however this should only result in addtional call to  pthread_cond_wait() but as
-     the cond is met, it will exit immediately (depending on schedulling) */
-    if (gki_cb.com.OSTaskQFirst[rtask][0])
-    gki_cb.com.OSWaitEvt[rtask] |= TASK_MBOX_0_EVT_MASK;
-    if (gki_cb.com.OSTaskQFirst[rtask][1])
-    gki_cb.com.OSWaitEvt[rtask] |= TASK_MBOX_1_EVT_MASK;
-    if (gki_cb.com.OSTaskQFirst[rtask][2])
-    gki_cb.com.OSWaitEvt[rtask] |= TASK_MBOX_2_EVT_MASK;
-    if (gki_cb.com.OSTaskQFirst[rtask][3])
-    gki_cb.com.OSWaitEvt[rtask] |= TASK_MBOX_3_EVT_MASK;
-#endif
-
     if (!(gki_cb.com.OSWaitEvt[rtask] & flag))
     {
         if (timeout)
         {
-            //            timeout = GKI_MS_TO_TICKS(timeout);     /* convert from milliseconds to ticks */
-
-            /* get current system time */
-            //            clock_gettime(CLOCK_MONOTONIC, &currSysTime);
-            //            abstime.tv_sec = currSysTime.time;
-            //            abstime.tv_nsec = NANOSEC_PER_MILLISEC * currSysTime.millitm;
             clock_gettime(CLOCK_MONOTONIC, &abstime);
 
             /* add timeout */
@@ -948,7 +932,7 @@ void GKI_enable (void)
 {
     GKI_TRACE_0("GKI_enable");
     pthread_mutex_unlock(&gki_cb.os.GKI_mutex);
-/* 	pthread_mutex_xx is nesting save, no need for this: already_disabled = 0; */
+/*	pthread_mutex_xx is nesting save, no need for this: already_disabled = 0; */
     GKI_TRACE_0("Leaving GKI_enable");
     return;
 }
@@ -970,7 +954,7 @@ void GKI_disable (void)
 
 /*	pthread_mutex_xx is nesting save, no need for this: if (!already_disabled) {
     already_disabled = 1; */
-    		pthread_mutex_lock(&gki_cb.os.GKI_mutex);
+    pthread_mutex_lock(&gki_cb.os.GKI_mutex);
 /*  } */
     //GKI_TRACE_0("Leaving GKI_disable");
     return;

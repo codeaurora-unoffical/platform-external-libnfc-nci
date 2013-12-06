@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -20,8 +24,10 @@
  * Construct a buffer that contains multiple Type-Length-Value contents
  * that is used by the HAL in a CORE_SET_CONFIG NCI command.
  ******************************************************************************/
-
-#define LOG_TAG "NfcNciHal"
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#define LOG_TAG "NfcHal"
 #include "OverrideLog.h"
 #include "StartupConfig.h"
 

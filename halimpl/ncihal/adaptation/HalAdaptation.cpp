@@ -1,4 +1,9 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+
+/******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
  *
@@ -23,7 +28,10 @@
  *  Broadcom-specific features to the Android framework.
  *
  ******************************************************************************/
-#define LOG_TAG "NfcNciHal"
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#define LOG_TAG "NfcHal"
 #include "OverrideLog.h"
 #include "HalAdaptation.h"
 #include "SyncEvent.h"
@@ -53,8 +61,8 @@ static SyncEvent gCloseCompletedEvent;
 
 UINT32 ScrProtocolTraceFlag = SCR_PROTO_TRACE_ALL; //0x017F00;
 
-static void BroadcomHalCallback (UINT8 event, tHAL_NFC_STATUS status);
-static void BroadcomHalDataCallback (UINT16 data_len, UINT8* p_data);
+static void NfcHalCallback (UINT8 event, tHAL_NFC_STATUS status);
+static void NfcHalDataCallback (UINT16 data_len, UINT8* p_data);
 
 extern tNFC_HAL_CFG *p_nfc_hal_cfg;
 extern const UINT8  nfca_version_string [];
@@ -63,7 +71,7 @@ extern const UINT8  nfa_version_string [];
 ///////////////////////////////////////
 
 
-int HaiInitializeLibrary (const bcm2079x_dev_t* device)
+int HaiInitializeLibrary (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     ALOGE ("%s: ver=%s nfa=%s", __FUNCTION__, nfca_version_string, nfa_version_string);
@@ -74,89 +82,11 @@ int HaiInitializeLibrary (const bcm2079x_dev_t* device)
     UINT8 logLevel = 0;
 
     logLevel = InitializeGlobalAppLogLevel ();
-
-    verify_hal_non_volatile_store ();
-    if ( GetNumValue ( NAME_PRESERVE_STORAGE, (char*)&num, sizeof ( num ) ) &&
-            (num == 1) )
-        ALOGD ("%s: preserve HAL NV store", __FUNCTION__);
-    else
-    {
-        delete_hal_non_volatile_store (false);
-    }
-
+    tUSERIAL_OPEN_CFG cfg;
     // Initialize protocol logging level
     if ( GetNumValue ( NAME_PROTOCOL_TRACE_LEVEL, &num, sizeof ( num ) ) )
         ScrProtocolTraceFlag = num;
 
-    tUSERIAL_OPEN_CFG cfg;
-    struct tUART_CONFIG  uart;
-
-    if ( GetStrValue ( NAME_UART_PARITY, temp, sizeof ( temp ) ) )
-    {
-        if ( strcmp ( temp, "even" ) == 0 )
-            uart.m_iParity = USERIAL_PARITY_EVEN;
-        else if ( strcmp ( temp, "odd" ) == 0 )
-            uart.m_iParity = USERIAL_PARITY_ODD;
-        else if ( strcmp ( temp, "none" ) == 0 )
-            uart.m_iParity = USERIAL_PARITY_NONE;
-    }
-    else
-        uart.m_iParity = USERIAL_PARITY_NONE;
-
-    if ( GetStrValue ( NAME_UART_STOPBITS, temp, sizeof ( temp ) ) )
-    {
-        if ( strcmp ( temp, "1" ) == 0 )
-            uart.m_iStopbits = USERIAL_STOPBITS_1;
-        else if ( strcmp ( temp, "2" ) == 0 )
-            uart.m_iStopbits = USERIAL_STOPBITS_2;
-        else if ( strcmp ( temp, "1.5" ) == 0 )
-            uart.m_iStopbits = USERIAL_STOPBITS_1_5;
-    }
-    else if ( GetNumValue ( NAME_UART_STOPBITS, &num, sizeof ( num ) ) )
-    {
-        if ( num == 1 )
-            uart.m_iStopbits = USERIAL_STOPBITS_1;
-        else if ( num == 2 )
-            uart.m_iStopbits = USERIAL_STOPBITS_2;
-    }
-    else
-        uart.m_iStopbits = USERIAL_STOPBITS_1;
-
-    if ( GetNumValue ( NAME_UART_DATABITS, &num, sizeof ( num ) ) )
-    {
-        if ( 5 <= num && num <= 8 )
-            uart.m_iDatabits = ( 1 << ( num + 1 ) );
-    }
-    else
-        uart.m_iDatabits = USERIAL_DATABITS_8;
-
-    if ( GetNumValue ( NAME_UART_BAUD, &num, sizeof ( num ) ) )
-    {
-        if ( num == 300 ) uart.m_iBaudrate = USERIAL_BAUD_300;
-        else if ( num == 600 ) uart.m_iBaudrate = USERIAL_BAUD_600;
-        else if ( num == 1200 ) uart.m_iBaudrate = USERIAL_BAUD_1200;
-        else if ( num == 2400 ) uart.m_iBaudrate = USERIAL_BAUD_2400;
-        else if ( num == 9600 ) uart.m_iBaudrate = USERIAL_BAUD_9600;
-        else if ( num == 19200 ) uart.m_iBaudrate = USERIAL_BAUD_19200;
-        else if ( num == 57600 ) uart.m_iBaudrate = USERIAL_BAUD_57600;
-        else if ( num == 115200 ) uart.m_iBaudrate = USERIAL_BAUD_115200;
-        else if ( num == 230400 ) uart.m_iBaudrate = USERIAL_BAUD_230400;
-        else if ( num == 460800 ) uart.m_iBaudrate = USERIAL_BAUD_460800;
-        else if ( num == 921600 ) uart.m_iBaudrate = USERIAL_BAUD_921600;
-    }
-    else if ( GetStrValue ( NAME_UART_BAUD, temp, sizeof ( temp ) ) )
-    {
-        if ( strcmp ( temp, "auto" ) == 0 )
-            uart.m_iBaudrate = USERIAL_BAUD_AUTO;
-    }
-    else
-        uart.m_iBaudrate = USERIAL_BAUD_115200;
-
-    memset (&cfg, 0, sizeof(tUSERIAL_OPEN_CFG));
-    cfg.fmt = uart.m_iDatabits | uart.m_iParity | uart.m_iStopbits;
-    cfg.baud = uart.m_iBaudrate;
-
-    ALOGD ("%s: uart config=0x%04x, %d\n", __func__, cfg.fmt, cfg.baud);
     USERIAL_Init(&cfg);
 
     if ( GetNumValue ( NAME_NFCC_ENABLE_TIMEOUT, &num, sizeof ( num ) ) )
@@ -170,6 +100,10 @@ int HaiInitializeLibrary (const bcm2079x_dev_t* device)
         p_nfc_hal_cfg->nfc_hal_hci_uicc_support = 0;
     }
 
+    // Initialize appliation logging level
+    if ( GetNumValue ( NAME_APPL_TRACE_LEVEL, &num, sizeof ( num ) ) ) {
+        HAL_NfcSetTraceLevel(num);
+    }
     HAL_NfcInitialize ();
     HAL_NfcSetTraceLevel (logLevel); // Initialize HAL's logging level
 
@@ -194,7 +128,7 @@ int HaiTerminateLibrary ()
 }
 
 
-int HaiOpen (const bcm2079x_dev_t* device, nfc_stack_callback_t* halCallbackFunc, nfc_stack_data_callback_t* halDataCallbackFunc)
+int HaiOpen (const nfc_dev_t* device, nfc_stack_callback_t* halCallbackFunc, nfc_stack_data_callback_t* halDataCallbackFunc, char mode)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -203,7 +137,7 @@ int HaiOpen (const bcm2079x_dev_t* device, nfc_stack_callback_t* halCallbackFunc
     gAndroidHalDataCallback = halDataCallbackFunc;
 
     SyncEventGuard guard (gOpenCompletedEvent);
-    HAL_NfcOpen (BroadcomHalCallback, BroadcomHalDataCallback);
+    HAL_NfcOpen (NfcHalCallback, NfcHalDataCallback, mode);
     gOpenCompletedEvent.wait ();
 
     retval = 0;
@@ -212,7 +146,7 @@ int HaiOpen (const bcm2079x_dev_t* device, nfc_stack_callback_t* halCallbackFunc
 }
 
 
-void BroadcomHalCallback (UINT8 event, tHAL_NFC_STATUS status)
+void NfcHalCallback (UINT8 event, tHAL_NFC_STATUS status)
 {
     ALOGD ("%s: enter; event=0x%X", __FUNCTION__, event);
     switch (event)
@@ -264,14 +198,14 @@ void BroadcomHalCallback (UINT8 event, tHAL_NFC_STATUS status)
 }
 
 
-void BroadcomHalDataCallback (UINT16 data_len, UINT8* p_data)
+void NfcHalDataCallback (UINT16 data_len, UINT8* p_data)
 {
     ALOGD ("%s: enter; len=%u", __FUNCTION__, data_len);
     gAndroidHalDataCallback (data_len, p_data);
 }
 
 
-int HaiClose (const bcm2079x_dev_t* device)
+int HaiClose (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -285,7 +219,7 @@ int HaiClose (const bcm2079x_dev_t* device)
 }
 
 
-int HaiCoreInitialized (const bcm2079x_dev_t* device, uint8_t* coreInitResponseParams)
+int HaiCoreInitialized (const nfc_dev_t* device, uint8_t* coreInitResponseParams)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -299,7 +233,7 @@ int HaiCoreInitialized (const bcm2079x_dev_t* device, uint8_t* coreInitResponseP
 }
 
 
-int HaiWrite (const bcm2079x_dev_t* dev, uint16_t dataLen, const uint8_t* data)
+int HaiWrite (const nfc_dev_t* dev, uint16_t dataLen, const uint8_t* data)
 {
     ALOGD ("%s: enter; len=%u", __FUNCTION__, dataLen);
     int retval = EACCES;
@@ -311,7 +245,7 @@ int HaiWrite (const bcm2079x_dev_t* dev, uint16_t dataLen, const uint8_t* data)
 }
 
 
-int HaiPreDiscover (const bcm2079x_dev_t* device)
+int HaiPreDiscover (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -322,7 +256,7 @@ int HaiPreDiscover (const bcm2079x_dev_t* device)
 }
 
 
-int HaiControlGranted (const bcm2079x_dev_t* device)
+int HaiControlGranted (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -334,7 +268,7 @@ int HaiControlGranted (const bcm2079x_dev_t* device)
 }
 
 
-int HaiPowerCycle (const bcm2079x_dev_t* device)
+int HaiPowerCycle (const nfc_dev_t* device)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;
@@ -346,7 +280,7 @@ int HaiPowerCycle (const bcm2079x_dev_t* device)
 }
 
 
-int HaiGetMaxNfcee (const bcm2079x_dev_t* device, uint8_t* maxNfcee)
+int HaiGetMaxNfcee (const nfc_dev_t* device, uint8_t* maxNfcee)
 {
     ALOGD ("%s: enter", __FUNCTION__);
     int retval = EACCES;

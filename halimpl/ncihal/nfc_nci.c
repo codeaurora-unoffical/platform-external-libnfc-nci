@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -16,8 +20,10 @@
  *
  ******************************************************************************/
 
-
-#define LOG_TAG "NfcNciHal"
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#define LOG_TAG "NfcHal"
 #include "OverrideLog.h"
 #include <errno.h>
 #include <hardware/hardware.h>
@@ -33,9 +39,12 @@
 static int hal_open (const struct nfc_nci_device *p_dev, nfc_stack_callback_t *p_hal_cback, nfc_stack_data_callback_t *p_hal_data_callback)
 {
     int retval = 0;
-    bcm2079x_dev_t *dev = (bcm2079x_dev_t*) p_dev;
+    char mode = 0;
+    nfc_dev_t *dev = (nfc_dev_t*) p_dev;
 
-    retval = HaiOpen (dev, p_hal_cback, p_hal_data_callback);
+    mode = (char)dev->nci_device.common.reserved[0];
+    ALOGD ("nfc:hal_open: mode=%d ", mode);
+    retval = HaiOpen (dev, p_hal_cback, p_hal_data_callback, mode);
     return retval;
 }
 
@@ -44,7 +53,7 @@ static int hal_write (const struct nfc_nci_device *p_dev,
         uint16_t data_len, const uint8_t *p_data)
 {
     int retval = 0;
-    bcm2079x_dev_t* dev = (bcm2079x_dev_t*) p_dev;
+    nfc_dev_t* dev = (nfc_dev_t*) p_dev;
 
     retval = HaiWrite (dev, data_len, p_data);
     return retval;
@@ -55,7 +64,7 @@ static int hal_core_initialized (const struct nfc_nci_device *p_dev,
         uint8_t* p_core_init_rsp_params)
 {
     int retval = 0;
-    bcm2079x_dev_t* dev = (bcm2079x_dev_t*) p_dev;
+    nfc_dev_t* dev = (nfc_dev_t*) p_dev;
 
     retval = HaiCoreInitialized (dev, p_core_init_rsp_params);
     return retval;
@@ -65,7 +74,7 @@ static int hal_core_initialized (const struct nfc_nci_device *p_dev,
 static int hal_pre_discover (const struct nfc_nci_device *p_dev)
 {
     int retval = 0;
-    bcm2079x_dev_t* dev = (bcm2079x_dev_t*) p_dev;
+    nfc_dev_t* dev = (nfc_dev_t*) p_dev;
 
     retval = HaiPreDiscover (dev);
     return retval;
@@ -75,7 +84,7 @@ static int hal_pre_discover (const struct nfc_nci_device *p_dev)
 static int hal_close (const struct nfc_nci_device *p_dev)
 {
     int retval = 0;
-    bcm2079x_dev_t* dev = (bcm2079x_dev_t*) p_dev;
+    nfc_dev_t* dev = (nfc_dev_t*) p_dev;
 
     retval = HaiClose (dev);
     return retval;
@@ -85,7 +94,7 @@ static int hal_close (const struct nfc_nci_device *p_dev)
 static int hal_control_granted (const struct nfc_nci_device *p_dev)
 {
     int retval = 0;
-    bcm2079x_dev_t* dev = (bcm2079x_dev_t*) p_dev;
+    nfc_dev_t* dev = (nfc_dev_t*) p_dev;
 
     retval = HaiControlGranted (dev);
    return retval;
@@ -95,17 +104,16 @@ static int hal_control_granted (const struct nfc_nci_device *p_dev)
 static int hal_power_cycle (const struct nfc_nci_device *p_dev)
 {
     int retval = 0;
-    bcm2079x_dev_t* dev = (bcm2079x_dev_t*) p_dev;
+    nfc_dev_t* dev = (nfc_dev_t*) p_dev;
 
     retval = HaiPowerCycle (dev);
     return retval;
 }
 
-
 static int hal_get_max_nfcee (const struct nfc_nci_device *p_dev, uint8_t* maxNfcee)
 {
     int retval = 0;
-    bcm2079x_dev_t* dev = (bcm2079x_dev_t*) p_dev;
+        nfc_dev_t* dev = (nfc_dev_t*) p_dev;
 
     retval = HaiGetMaxNfcee (dev, maxNfcee);
     return retval;
@@ -133,7 +141,7 @@ static int nfc_open (const hw_module_t* module, const char* name, hw_device_t** 
 
     if (strcmp (name, NFC_NCI_CONTROLLER) == 0)
     {
-        bcm2079x_dev_t *dev = calloc (1, sizeof(bcm2079x_dev_t));
+        nfc_dev_t *dev = calloc (1, sizeof(nfc_dev_t));
 
         // Common hw_device_t fields
         dev->nci_device.common.tag = HARDWARE_DEVICE_TAG;

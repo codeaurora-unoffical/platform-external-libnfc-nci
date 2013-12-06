@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2012-2013 Broadcom Corporation
  *
@@ -170,7 +174,7 @@ EXPORT_HAL_API void HAL_NfcTerminate(void);
 ** Returns          void
 **
 *******************************************************************************/
-EXPORT_HAL_API void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback);
+EXPORT_HAL_API void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback, char mode);
 
 /*******************************************************************************
 **
