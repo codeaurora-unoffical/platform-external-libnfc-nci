@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2013 Broadcom Corporation
  *
@@ -233,6 +237,13 @@ typedef UINT8 tNCI_STATUS;
 /**********************************************
  * NCI Proprietary  Group       - F
  **********************************************/
+/**********************************************
+ * Proprietary Group Opcode    - 1
+ **********************************************/
+#define NCI_MSG_PROP_MEMACCESS          00
+#define NCI_MSG_PROP_GENERIC            01
+#define NCI_MSG_PROP_ROMINFO            02
+#define NCI_MSG_PROP_SLEEP              03
 
 /**********************************************
  * NCI Core Group Params
@@ -393,7 +404,7 @@ typedef UINT8 tNCI_INTF_TYPE;
 #define NCI_PROTOCOL_15693              0x83
 #endif
 #ifndef NCI_PROTOCOL_KOVIO
-#define NCI_PROTOCOL_KOVIO              0x8a
+#define NCI_PROTOCOL_KOVIO              0x82
 #endif
 
 
@@ -404,7 +415,7 @@ typedef UINT8 tNCI_INTF_TYPE;
 #define NCI_DISCOVERY_TYPE_POLL_A_ACTIVE        0x03
 #define NCI_DISCOVERY_TYPE_POLL_F_ACTIVE        0x05
 #define NCI_DISCOVERY_TYPE_POLL_B_PRIME         0x74
-#define NCI_DISCOVERY_TYPE_POLL_KOVIO           0x77
+#define NCI_DISCOVERY_TYPE_POLL_KOVIO           0x71
 #define NCI_DISCOVERY_TYPE_LISTEN_A             0x80
 #define NCI_DISCOVERY_TYPE_LISTEN_B             0x81
 #define NCI_DISCOVERY_TYPE_LISTEN_F             0x82
