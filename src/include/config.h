@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
@@ -30,10 +34,12 @@ int GetNumValue(const char* name, void* p_value, unsigned long len);
 };
 #endif
 
+#define NAME_NFA_DM_ENABLE_SLEEP        "NFA_DM_ENABLE_SLEEP"
 #define NAME_POLLING_TECH_MASK          "POLLING_TECH_MASK"
 #define NAME_REGISTER_VIRTUAL_SE        "REGISTER_VIRTUAL_SE"
 #define NAME_APPL_TRACE_LEVEL           "APPL_TRACE_LEVEL"
 #define NAME_USE_RAW_NCI_TRACE          "USE_RAW_NCI_TRACE"
+#define NAME_LOG_TO_FILE                "LOG_TO_FILE"
 #define NAME_LOGCAT_FILTER              "LOGCAT_FILTER"
 #define NAME_LPTD_CFG                   "LPTD_CFG"
 #define NAME_SCREEN_OFF_POWER_STATE     "SCREEN_OFF_POWER_STATE"
@@ -79,7 +85,7 @@ int GetNumValue(const char* name, void* p_value, unsigned long len);
 #define                     LPTD_PARAM_LEN (40)
 
 // default configuration
-#define default_transport       "/dev/bcm2079x"
+#define default_transport       "/dev/nfc-nci"
 #define default_storage_location "/data/nfc"
 
 struct tUART_CONFIG {
