@@ -379,7 +379,7 @@ BOOLEAN nfc_ncif_process_event (BT_HDR *p_msg)
     case NCI_MT_DATA:
         NFC_TRACE_DEBUG0 ("NFC received data");
         nfc_ncif_proc_data (p_msg);
-        free = FALSE;
+        free = TRUE;
         break;
 
     case NCI_MT_RSP:
