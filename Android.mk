@@ -12,7 +12,7 @@ NFA := src/nfa
 NFC := src/nfc
 HAL := src/hal
 UDRV := src/udrv
-HALIMPL := halimpl/bcm2079x
+HALIMPL := halimpl/ncihal
 D_CFLAGS := -DANDROID -DBUILDCFG=1
 
 
@@ -64,6 +64,7 @@ LOCAL_C_INCLUDES := external/stlport/stlport bionic/ bionic/libstdc++/include \
     $(LOCAL_PATH)/$(HALIMPL)/include \
     $(LOCAL_PATH)/$(HALIMPL)/gki/ulinux \
     $(LOCAL_PATH)/$(HALIMPL)/gki/common \
+    $(LOCAL_PATH)/$(HALIMPL)/DT_Include \
     $(LOCAL_PATH)/$(HAL)/include \
     $(LOCAL_PATH)/$(HAL)/int \
     $(LOCAL_PATH)/src/include \
