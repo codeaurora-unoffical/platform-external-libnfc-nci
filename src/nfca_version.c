@@ -1,3 +1,7 @@
+/****************************************************************************/
+/*Copyright (c) 2013, The Linux Foundation. All rights reserved.*/
+/*Modifications to pre-existing Apache v2.0 licensed code are not a Contribution*/
+/****************************************************************************/
 /******************************************************************************
  *
  *  Copyright (C) 2012 Broadcom Corporation
