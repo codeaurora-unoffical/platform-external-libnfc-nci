@@ -1,4 +1,8 @@
 /******************************************************************************
+* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+* Not a Contribution.
+ ******************************************************************************/
+/******************************************************************************
  *
  *  Copyright (C) 2010-2013 Broadcom Corporation
  *
@@ -1163,7 +1167,7 @@ tNFC_STATUS NFC_Deactivate (tNFC_DEACT_TYPE deactivate_type)
         nfc_set_state (NFC_STATE_CLOSING);
         NFC_TRACE_DEBUG3 ( "act_protocol %d credits:%d/%d", p_cb->act_protocol, p_cb->init_credits, p_cb->num_buff);
         if ((p_cb->act_protocol == NCI_PROTOCOL_NFC_DEP) &&
-            (p_cb->init_credits != p_cb->num_buff))
+            (p_cb->init_credits != p_cb->num_buff) && (p_cb->num_buff == 0))
         {
             nfc_cb.flags           |= NFC_FL_DEACTIVATING;
             nfc_cb.deactivate_timer.param = (TIMER_PARAM_TYPE) deactivate_type;
