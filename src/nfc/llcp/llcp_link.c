@@ -1728,7 +1728,11 @@ void llcp_link_connection_cback (UINT8 conn_id, tNFC_CONN_EVT event, tNFC_CONN *
     else if (event == NFC_ERROR_CEVT)
     {
         /* RF interface specific status code */
-        llcp_link_deactivate (*(UINT8*) p_data);
+        /* ignore timeout error in target mode */
+        if ((llcp_cb.lcb.is_initiator)||((*(UINT8*) p_data) != LLCP_LINK_RF_TIMEOUT))
+        {
+            llcp_link_deactivate (*(UINT8*) p_data);
+        }
     }
     else if (event == NFC_DEACTIVATE_CEVT)
     {
