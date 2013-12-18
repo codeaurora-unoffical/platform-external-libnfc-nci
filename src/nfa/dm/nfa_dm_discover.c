@@ -1277,7 +1277,9 @@ void nfa_dm_start_rf_discover (void)
         if ((nfa_ee_cb.se_prot_flag != 0x00)&&(listenmask != 0x00))
         {
             nfa_dm_set_qnci_params (listenmask, p2p_listen_mask);
+            /* HACK: DO NOT RESET THis flag to pass correct SAK value for screen on/off
             nfa_ee_cb.se_prot_flag = 0x00; // reset flag once op completed.
+             */
         }
         nfa_dm_set_default_listen_mode_routing_table();
 
