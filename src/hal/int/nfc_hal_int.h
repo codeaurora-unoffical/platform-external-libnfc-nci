@@ -253,7 +253,8 @@ enum
     NFC_HAL_INIT_STATE_W4_PREDISCOVER_DONE,/* Waiting for complete of prediscover   */
     NFC_HAL_INIT_STATE_CLOSING,            /* Shutting down                         */
     NFC_HAL_INIT_FOR_PATCH_DNLD,           /* hal init for patch download to happen*/
-    NFC_HAL_INIT_STATE_W4_RE_INIT          /* Waiting for reset rsp on ReInit       */
+    NFC_HAL_INIT_STATE_W4_RE_INIT,         /* Waiting for reset rsp on ReInit       */
+    NFC_HAL_INIT_STATE_RAMDUMP             /* NFCC reset. Ramdump initiation        */
 };
 
 typedef struct
@@ -546,6 +547,10 @@ void nfc_hal_dm_shutting_down_nfcc (void);
 BOOLEAN nfc_hal_dm_power_mode_execute (tNFC_HAL_LP_EVT event);
 void nfc_hal_dm_send_pend_cmd (void);
 tHAL_NFC_STATUS nfc_hal_dm_set_config (UINT8 tlv_size, UINT8 *p_param_tlvs, tNFC_HAL_NCI_CBACK *p_cback);
+void nfc_hal_dm_send_prop_init_ramdump_cmd (void);
+void nfc_hal_dm_send_prop_get_ramdump_cmd (int ramdump_start_addr, int ramdump_length);
+void nfc_hal_dm_send_prop_end_ramdump_cmd (void);
+void nfc_hal_dm_send_prop_reset_nfcc_ramdump_poke (void);
 void nfc_hal_store_info(UINT8 operation);
 void nfc_hal_dm_send_prop_nci_region2_enable_cmd(UINT8 debaug_status);
 char nfc_hal_retrieve_info(void);

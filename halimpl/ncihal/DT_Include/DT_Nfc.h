@@ -119,7 +119,8 @@ extern	NFC_RETURN_CODE	DT_Nfc_SetTestPoint(long TestPointNumber);
 extern	NFC_RETURN_CODE	DT_Nfc_SetRxBlockNumber(long BlockNumber);
 extern	NFC_RETURN_CODE	DT_Set_Power(int state);
 extern	int				DT_Get_Nfcc_Version(int field);
-extern	uint16_t		DT_Unprocessed_Data();
+extern  uint16_t		DT_Unprocessed_Data();
+extern	uint8_t			DT_Nfc_RamdumpPerformed;
 
 
 #endif /* DTNFC_H */
