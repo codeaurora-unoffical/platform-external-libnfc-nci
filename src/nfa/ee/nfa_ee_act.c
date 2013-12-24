@@ -1425,53 +1425,60 @@ void nfa_ee_nci_disc_req_ntf(tNFA_EE_MSG *p_data)
         p_cb->ecb_flags |= NFA_EE_ECB_FLAGS_DISC_REQ;
         if (p_cbk->info[xx].op == NFC_EE_DISC_OP_ADD)
         {
-            if (p_cbk->info[xx].tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_A)
+            if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_A)
             {
-                p_cb->la_protocol = p_cbk->info[xx].protocol;
+                p_cb->la_protocol = p_cbk->info[xx].info.req_info.protocol;
                 /*TODO: Remove below line (once nfcee app is ready) and se_prot_flag from EE Cb */
                 nfa_ee_cb.se_prot_flag |= 0x01;
             }
-            else if (p_cbk->info[xx].tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B)
+            else if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B)
             {
-                p_cb->lb_protocol = p_cbk->info[xx].protocol;
+                p_cb->lb_protocol = p_cbk->info[xx].info.req_info.protocol;
                 /*TODO: Remove below line (once nfcee app is ready) and se_prot_flag from EE Cb */
                 nfa_ee_cb.se_prot_flag |= 0x02;
             }
-            else if (p_cbk->info[xx].tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_F)
+            else if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_F)
             {
-                p_cb->lf_protocol = p_cbk->info[xx].protocol;
+                p_cb->lf_protocol = p_cbk->info[xx].info.req_info.protocol;
                 /*TODO: Remove below line (once nfcee app is ready) and se_prot_flag from EE Cb */
                 nfa_ee_cb.se_prot_flag |= 0x04;
             }
-            else if (p_cbk->info[xx].tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B_PRIME)
+            else if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B_PRIME)
             {
-                p_cb->lbp_protocol = p_cbk->info[xx].protocol;
+                p_cb->lbp_protocol = p_cbk->info[xx].info.req_info.protocol;
                 /*TODO: Remove below line (once nfcee app is ready) and se_prot_flag from EE Cb */
                 nfa_ee_cb.se_prot_flag |= 0x08;
             }
-            NFA_TRACE_DEBUG6 ("nfcee_id=0x%x ee_status=0x%x ecb_flags=0x%x la_protocol=0x%x lb_protocol=0x%x lf_protocol=0x%x",
-                p_cb->nfcee_id, p_cb->ee_status, p_cb->ecb_flags,
-                p_cb->la_protocol, p_cb->lb_protocol, p_cb->lf_protocol);
         }
-        else
+        else if (p_cbk->info[xx].op == NFC_EE_DISC_OP_REMOVE)
         {
-            if (p_cbk->info[xx].tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_A)
+            if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_A)
             {
                 p_cb->la_protocol = 0;
+                p_cb->se_sak      = 0;
             }
-            else if (p_cbk->info[xx].tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B)
+            else if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B)
             {
                 p_cb->lb_protocol = 0;
             }
-            else if (p_cbk->info[xx].tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_F)
+            else if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_F)
             {
                 p_cb->lf_protocol = 0;
             }
-            else if (p_cbk->info[xx].tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B_PRIME)
+            else if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B_PRIME)
             {
                 p_cb->lbp_protocol = 0;
+            }
         }
+        else if (p_cbk->info[xx].op == NFC_EE_DISC_OP_SAK_INFO)
+        {
+            p_cb->se_sak = p_cbk->info[xx].info.sak_info.sak;
         }
+
+        NFA_TRACE_DEBUG3 ("nfcee_id=0x%x ee_status=0x%x ecb_flags=0x%x",
+                           p_cb->nfcee_id, p_cb->ee_status, p_cb->ecb_flags);
+        NFA_TRACE_DEBUG4 ("              la_protocol=0x%x lb_protocol=0x%x lf_protocol=0x%x se_sak=0x%x",
+                           p_cb->la_protocol, p_cb->lb_protocol, p_cb->lf_protocol, p_cb->se_sak);
     }
 
 
