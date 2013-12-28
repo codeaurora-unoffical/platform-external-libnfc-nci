@@ -1426,8 +1426,8 @@ static tNFA_STATUS nfa_dm_disc_notify_activation (tNFC_DISCOVER *p_data)
     {
         for (xx = 0; xx < NFA_DM_DISC_NUM_ENTRIES; xx++)
         {
-            if (  (nfa_dm_cb.disc_cb.entry[xx].in_use)
-                &&(nfa_dm_cb.disc_cb.entry[xx].host_id != NFA_DM_DISC_HOST_ID_DH))
+            if (  (nfa_dm_cb.disc_cb.entry[xx].in_use))
+               /* host_id != NFA_DM_DISC_HOST_ID_DH removed for now, need to know if needed later*/
             {
                 nfa_dm_cb.disc_cb.activated_rf_disc_id   = p_data->activate.rf_disc_id;
                 nfa_dm_cb.disc_cb.activated_rf_interface = p_data->activate.intf_param.type;
