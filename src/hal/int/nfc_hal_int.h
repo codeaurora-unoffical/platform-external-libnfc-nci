@@ -232,6 +232,8 @@ extern const char * const nfc_hal_init_state_str[];
 #define NUM_OF_BYTES_NUMBER_OF_ITEMS     0x01
 #define NUM_OF_BYTES_ADD_DELTA           0x01
 #define NUM_OF_BYTES_ACCESS_DELAY        0x02
+#define NUM_OF_BYTES_READ_SUB_OPCODE     0x02
+#define NUM_OF_BYTES_WRITE_SUB_OPCODE    0x01
 
 /* NFC HAL - NFCC initializing state */
 enum
@@ -259,6 +261,7 @@ typedef struct
     FILE  *p_Nvm_file;
     UINT16 no_of_updates;
     UINT8 nvm_updated;
+    BOOLEAN is_started;
 } tNFC_HAL_NVM_CB;
 
 
@@ -545,6 +548,8 @@ void nfc_hal_prm_nci_command_complete_cback (tNFC_HAL_NCI_EVT event, UINT16 data
 void nfc_hal_prm_process_timeout (void *p_tle);
 int nfc_hal_dm_check_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen);
 void nfc_hal_dm_frame_mem_access_cmd(UINT8 *nvmpokecmd,UINT8 *nvmupdatebuff,UINT8 *nvmpokecmdlen);
+int nfc_hal_dm_check_fused_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen);
+void nfc_hal_dm_frame_fused_mem_access_cmd(UINT8 *nvmcmd,UINT8 *nvmupdatebuff,UINT8 *nvmcmdlen);
 
 /* nfc_hal_hci.c */
 void nfc_hal_hci_enable (void);
