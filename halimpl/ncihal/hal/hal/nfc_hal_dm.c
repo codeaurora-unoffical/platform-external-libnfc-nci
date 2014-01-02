@@ -966,6 +966,146 @@ void nfc_hal_dm_frame_mem_access_cmd(UINT8 *nvmcmd,UINT8 *nvmupdatebuff,UINT8 *n
    *nvmcmdlen = datalen;
 }
 /*******************************************************************************
+**
+** Function         nfc_hal_dm_check_fused_nvm_file
+**
+** Description      Checks if the NVM update file is available in specified dir
+**                  if yes then reads updates one by one.
+**
+** Returns          int(TRUE if file is present or vice versa)
+**
+*******************************************************************************/
+int nfc_hal_dm_check_fused_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen)
+{
+    UINT32 patchdatalength  = 0,datalen=0,no_of_bytes_to_read=0;
+    UINT8 ch = 0,i=0,no_of_octets=0,octet_cnt=0,j=0,tmp_databuff[100]={0},k=0;
+    UINT8 num_of_update[5]={0},cnt=0;
+    fpos_t position=0;
+    UINT8 nvm_read_req = FALSE;
+    char pNvmfilepath[100] = {0};
+
+    if(GetStrValue("FUSED_NVM_FILE_PATH", &pNvmfilepath[0], sizeof(pNvmfilepath)))
+    {
+        HAL_TRACE_DEBUG1("FUSED_NVM_FILE_PATH found: %s",pNvmfilepath);
+    }
+    else
+    {
+        HAL_TRACE_DEBUG0("FUSED_NVM_FILE_PATH not found");
+    }
+
+    if(!nfc_hal_cb.nvm.p_Nvm_file)
+    {
+        /*nvm update file is opened only once */
+        nfc_hal_cb.nvm.p_Nvm_file = fopen(pNvmfilepath,"rb");
+        if(nfc_hal_cb.nvm.p_Nvm_file)
+        {
+            while((ch != '\n'))
+            {
+                ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                num_of_update[cnt++] = ch;
+            }
+            nfc_hal_cb.nvm.no_of_updates = atoi((const char*)num_of_update);
+            nfc_hal_cb.nvm.nvm_updated = TRUE;
+        }
+        else
+        {
+            /*NVM Update file is not present*/
+            HAL_TRACE_DEBUG0("NVM Update file is not present");
+            return FALSE;
+        }
+    }
+
+    if(nfc_hal_cb.nvm.p_Nvm_file)
+    {
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);       // discard LF (new line char)
+
+     //   HAL_TRACE_DEBUG1("Test11 ch=%X",ch);
+
+        ch = 0;
+
+        /* read entry type.*/
+        nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+
+        if(nvmupdatebuff[i-1] == 6)
+        {
+            /*discard first space character*/
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+            /*NVM Read request.Read extra subcode byte from file*/
+            nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+            nvm_read_req = TRUE;
+        }
+
+        /*discard first space character*/
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+        /*Now read the Tag/Register index*/
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard 0
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard x
+
+        if(nvm_read_req != TRUE)
+        {
+            while(i !=5)
+                nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+        }
+        else
+        {
+            while(i !=6)
+                nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+        }
+
+        if(nvm_read_req != TRUE)
+        {
+            /* discard second space*/
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+            /*Now read the value*/
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard 0
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard x
+
+            while(i != 9)
+                nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+
+        }
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_frame_fused_mem_access_cmd
+**
+** Description     Prepares the fused NVM NCI Cmd with the provided update data
+**
+**
+** Returns         void
+**
+*******************************************************************************/
+void nfc_hal_dm_frame_fused_mem_access_cmd(UINT8 *nvmcmd,UINT8 *nvmupdatebuff,UINT8 *nvmcmdlen)
+{
+    UINT8 num_of_data_bytes = 0,j=0,datalen=0;
+
+   nvmcmd[datalen++] = 0x2F;
+   nvmcmd[datalen++] = 0x01;
+
+   if(nvmupdatebuff[0] == 6)
+   {
+       nvmcmd[datalen++] = NUM_OF_BYTES_READ_SUB_OPCODE + NUM_OF_BYTES_START_ADDR;
+
+       for(;datalen<(NUM_OF_BYTES_READ_SUB_OPCODE + NUM_OF_BYTES_START_ADDR+3);datalen++)
+           nvmcmd[datalen] = nvmupdatebuff[j++];
+
+   }
+   else
+   {
+       //value 4 bytes include by multiplying 2 in tag/register index bytes
+       nvmcmd[datalen++] = NUM_OF_BYTES_WRITE_SUB_OPCODE + (NUM_OF_BYTES_START_ADDR*2);
+
+       for(;datalen<(NUM_OF_BYTES_WRITE_SUB_OPCODE + (NUM_OF_BYTES_START_ADDR*2)+3);datalen++)
+           nvmcmd[datalen] = nvmupdatebuff[j++];
+
+   }
+   *nvmcmdlen = datalen;
+}
+/*******************************************************************************
 ** Function         nfc_hal_dm_send_get_build_info_cmd
 **
 ** Description      Send NCI_MSG_GET_BUILD_INFO CMD
@@ -1005,12 +1145,13 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
     UINT8 nvmupdatebuff[260] = {0}, nvmdatabufflen = 0;
     UINT8 *nvmcmd = NULL;
     UINT32 patch_update_flag = 0, nvm_update_flag = 0;
-    UINT32 patch_version = 0;
+    UINT32 patch_version = 0,fused_nvm_flag=0;
     char patchfilepath[100] = {0}, prepatchfilepath[100] = {0};
 
     HAL_TRACE_DEBUG1 ("nfc_hal_dm_proc_msg_during_init(): init state:%d", nfc_hal_cb.dev_cb.initializing_state);
     GetNumValue("PATCH_UPDATE_ENABLE_FLAG", &patch_update_flag, sizeof(patch_update_flag));
     GetNumValue("NVM_UPDATE_ENABLE_FLAG", &nvm_update_flag, sizeof(nvm_update_flag));
+    GetNumValue("FUSED_NVM_UPDATE_ENABLE_FLAG", &fused_nvm_flag, sizeof(fused_nvm_flag));
     if(GetStrValue("FW_PATCH", &patchfilepath[0], sizeof(patchfilepath)))
     {
         HAL_TRACE_DEBUG1("FW_PATCH found: %s",patchfilepath);
@@ -1165,14 +1306,14 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
             {
                 if (mt == NCI_MT_RSP)
                 {
-                    if(nvm_update_flag == TRUE)
+                    if((nvm_update_flag == TRUE) && (fused_nvm_flag == FALSE))
                     {
                         /*Check if NVM update file is available*/
                         if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates >0))
                         {
                             /*nvm update file is present . Send update before patch data*/
                             /* frame cmd now*/
-                            nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
+                            nvmcmd= (UINT8*)malloc(nvmdatabufflen+15);
                             if(nvmcmd)
                             {
                                 nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
@@ -1182,7 +1323,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                                 /*mem allocation failed */
                                 return;
                             }
-                            /* send nvm update cmd(NCI POKE) to NFCC*/
+                            /* send nvm update cmd to NFCC*/
                             nfc_hal_cb.nvm.no_of_updates--;
                             nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
                             free(nvmcmd);
@@ -1391,7 +1532,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
     {
         if (gid == NCI_GID_PROP) /* this is for download patch */
         {
-            if(nvm_update_flag)
+            if((nvm_update_flag == TRUE) && (fused_nvm_flag == FALSE))
             {
                 /* check if more nvm updates are to be sent */
                 if(nfc_hal_cb.nvm.no_of_updates > 0)
@@ -1399,11 +1540,11 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                     if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates > 0))
                     {
                         /* frame cmd now*/
-                        nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
+                        nvmcmd= (UINT8*)malloc(nvmdatabufflen+15);
                         if(nvmcmd)
                         {
                             nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
-                            /* send nvm update cmd(NCI POKE) to NFCC*/
+                            /* send nvm update cmd to NFCC*/
                             nfc_hal_cb.nvm.no_of_updates--;
                             nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
                             free(nvmcmd);

@@ -59,7 +59,7 @@ tGKI_CB   gki_cb;
 
 /* works only for 1ms to 1000ms heart beat ranges */
 #define LINUX_SEC (1000/TICKS_PER_SEC)
-// #define GKI_TICK_TIMER_DEBUG
+#define GKI_TICK_TIMER_DEBUG
 
 #define LOCK(m)  pthread_mutex_lock(&m)
 #define UNLOCK(m) pthread_mutex_unlock(&m)
@@ -175,7 +175,7 @@ void GKI_init(void)
 
     /* Initialiase GKI_timer_update suspend variables & mutexes to be in running state.
      * this works too even if GKI_NO_TICK_STOP is defined in btld.txt */
-    p_os->no_timer_suspend = GKI_TIMER_TICK_RUN_COND;
+    p_os->no_timer_suspend = GKI_TIMER_TICK_STOP_COND;
     pthread_mutex_init(&p_os->gki_timer_mutex, NULL);
     pthread_cond_init(&p_os->gki_timer_cond, NULL);
 }
@@ -414,7 +414,7 @@ void gki_system_tick_start_stop_cback(BOOLEAN start)
         *p_run_cond = GKI_TIMER_TICK_STOP_COND;
         /* GKI_enable(); */
 #ifdef GKI_TICK_TIMER_DEBUG
-        BT_TRACE_1( TRACE_LAYER_HCI, TRACE_TYPE_DEBUG, ">>> STOP GKI_timer_update(), wake_lock_count:%d", --wake_lock_count);
+         GKI_TRACE_ERROR_1(">>> STOP GKI_timer_update(), wake_lock_count:%d", --wake_lock_count);
 #endif
         release_wake_lock(WAKE_LOCK_ID);
         gki_cb.os.gki_timer_wake_lock_on = 0;
@@ -430,7 +430,7 @@ void gki_system_tick_start_stop_cback(BOOLEAN start)
         pthread_mutex_unlock( &p_os->gki_timer_mutex );
 
 #ifdef GKI_TICK_TIMER_DEBUG
-        BT_TRACE_1( TRACE_LAYER_HCI, TRACE_TYPE_DEBUG, ">>> START GKI_timer_update(), wake_lock_count:%d", ++wake_lock_count );
+        GKI_TRACE_ERROR_1(">>> START GKI_timer_update(), wake_lock_count:%d", ++wake_lock_count );
 #endif
     }
 }
@@ -549,7 +549,7 @@ void GKI_run (void *p_task_id)
         /* currently on reason to exit above loop is no_timer_suspend == GKI_TIMER_TICK_STOP_COND
          * block timer main thread till re-armed by  */
 #ifdef GKI_TICK_TIMER_DEBUG
-        BT_TRACE_0( TRACE_LAYER_HCI, TRACE_TYPE_DEBUG, ">>> SUSPENDED GKI_timer_update()" );
+         GKI_TRACE_ERROR_0(">>> SUSPENDED GKI_timer_update()" );
 #endif
         if (GKI_TIMER_TICK_EXIT_COND != *p_run_cond) {
             GKI_TRACE_1("%s waiting timer mutex", __func__);
@@ -561,11 +561,15 @@ void GKI_run (void *p_task_id)
         /* potentially we need to adjust os gki_cb.com.OSTicks */
 
 #ifdef GKI_TICK_TIMER_DEBUG
-        BT_TRACE_1( TRACE_LAYER_HCI, TRACE_TYPE_DEBUG, ">>> RESTARTED GKI_timer_update(): run_cond: %d",
-                    *p_run_cond );
+       GKI_TRACE_ERROR_1(">>> RESTARTED GKI_timer_update(): run_cond: %d", *p_run_cond );
 #endif
     } /* for */
 #endif
+
+#ifdef GKI_TICK_TIMER_DEBUG
+    GKI_TRACE_ERROR_1(">>> Exit GKI_timer_update(): run_cond: %d", *p_run_cond );
+#endif
+
     GKI_TRACE_1("%s exit", __func__);
     return;
 }
