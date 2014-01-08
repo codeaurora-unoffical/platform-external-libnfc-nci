@@ -358,7 +358,10 @@ static tNFA_STATUS nfa_dm_set_rf_listen_mode_config (tNFA_DM_DISC_TECH_PROTO_MAS
     else /* Let NFCC use UICC configuration by configuring with length = 0 */
     {
         UINT8_TO_STREAM (p, NFC_PMID_LB_SENSB_INFO);
-        UINT8_TO_STREAM (p, 0);
+        //UINT8_TO_STREAM (p, 0);
+        UINT8_TO_STREAM (p, NCI_PARAM_LEN_LB_SENSB_INFO);
+        UINT8_TO_STREAM (p, NCI_LISTEN_PROTOCOL_ISO_DEP);
+
         UINT8_TO_STREAM (p, NFC_PMID_LB_NFCID0);
         UINT8_TO_STREAM (p, 0);
         UINT8_TO_STREAM (p, NFC_PMID_LB_APPDATA);
