@@ -443,6 +443,10 @@ typedef struct
     UINT8                    patch_file_available;           /* This flag will be set if patch file is available*/
     UINT8                    patch_dnld_conn_close_delay;    /* This flag will enable 4 sec or configured delay for the conn close after
                                                                 patch is downloaded*/
+    UINT8                    nfcc_chip_version;               /* Chip version used in propogating patch*/
+    UINT8                    nfcc_chip_metal_version;         /* Chip Metal version used in propogating patch*/
+    UINT8                    store_path;                      /* flag to keep track whether path of relevent patch file as per NFCC version
+                                                                 is stored or not */
 } tNFC_HAL_DEV_CB;
 
 /* data members for NFC_HAL-HCI */
