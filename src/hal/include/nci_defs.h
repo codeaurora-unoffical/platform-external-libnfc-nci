@@ -433,11 +433,16 @@ typedef UINT8 tNCI_DISCOVERY_TYPE;
 #define NCI_EE_TRIG_RF_TECHNOLOGY       0x02
 #define NCI_EE_TRIG_APP_INIT            0x10
 
+#ifndef NCI_EE_ACT_PROPRIETARY_TAG_USED
+#define NCI_EE_ACT_TAG_AID              0x81        /* AID tag defined in HCI        */
+#define NCI_EE_ACT_TAG_DATA             0x82        /* Parameters tag defined in HCI */
+#else
 #define NCI_EE_ACT_TAG_AID              0xC0        /* AID                 */
 #define NCI_EE_ACT_TAG_PROTO            0xC1        /* RF protocol         */
 #define NCI_EE_ACT_TAG_TECH             0xC2        /* RF technology       */
 #define NCI_EE_ACT_TAG_DATA             0xC3        /* hex data for app    */
 #define NCI_EE_ACT_TAG_DEBUG            0xC4        /* debug trace         */
+#endif
 
 #define NCI_ROUTE_TAG_TECH              0x00        /* Technology based routing  */
 #define NCI_ROUTE_TAG_PROTO             0x01        /* Protocol based routing  */

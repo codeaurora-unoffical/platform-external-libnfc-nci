@@ -35,6 +35,7 @@ extern BOOLEAN HCI_LOOPBACK_DEBUG;
 
 
 #define NFA_HCI_HOST_ID_UICC0           0x02        /* Host ID for UICC 0 */
+#define NFA_HCI_HOST_ID_ESE             0xC0        /* Host ID for eSE */
 #define NFA_HCI_LAST_HOST_SPECIFIC_GATE 0xEF        /* Lost host specific gate */
 
 #define NFA_HCI_SESSION_ID_LEN          8           /* HCI Session ID length */
