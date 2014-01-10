@@ -20,6 +20,21 @@
  *
  ******************************************************************************/
 
+/*****************************************************************************
+** Debug macro. Uncomment when we get past testing phase.
+*****************************************************************************/
+
+/*
+ * We use NDEBUG to hide some ramdump debug traces and asserts. We use RAMDUMP to output some additional information.
+ * Note: ramdump is not a production level feature.
+ */
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+
+#ifndef RAMDUMP
+#define RAMDUMP
+#endif
 
 /******************************************************************************
  *
@@ -51,6 +66,36 @@
 #define NFC_HAL_I93_ENABLE_SMART_POLL       (1)
 #define PATCH_NOT_UPDATED                    3
 #define PATCH_UPDATED                        4
+static UINT8 nfc_hal_dm_init_ramdump_cmd[NCI_MSG_HDR_SIZE] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    NCI_OID_INIT,
+    0x00 /* Empty payload */
+};
+
+static UINT8 nfc_hal_dm_get_ramdump_cmd[NCI_MSG_HDR_SIZE + NCI_HAL_RAMDATA] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    NCI_OID_GET,
+    NCI_HAL_RAMDATA,        /* Currently 5 bytes in length */
+    0x00, 0x00, 0x00, 0x00, /* Start address to begin next RamDump upload */
+    0x00                    /* Length of this RamDump data */
+};
+
+static UINT8 nfc_hal_dm_end_ramdump_cmd[NCI_MSG_HDR_SIZE] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    NCI_OID_END,
+    0x00 /* Empty payload */
+};
+
+static UINT8 nfc_hal_dm_ramdump_reset_nfcc[NCI_MSG_HDR_SIZE + 0x0D] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    0x00,
+    0x0D,
+    0x82, 0x78, 0x56, 0x34, 0x12, 0x01, 0x00, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00
+};
 
 #define NFCA_PATCHFILE_V30_LOCATION  "/system/etc/firmware/Signedrompatch_v30.bin"
 #define NFCA_PATCHFILE_V20_LOCATION  "/system/etc/firmware/Signedrompatch_v20.bin"
@@ -175,6 +220,15 @@ extern UINT8 *p_nfc_hal_dm_lptd_cfg;
 extern UINT8 *p_nfc_hal_dm_start_up_cfg;
 extern UINT8 *p_nfc_hal_dm_start_up_vsc_cfg;
 extern tNFC_HAL_CFG *p_nfc_hal_cfg;
+/*This flag will be set true if ramdump is being started*/
+extern UINT8 reset_status;
+
+/* Ramdump actions */
+#ifndef NDEBUG
+extern void nfc_hal_nci_handle_ramdump_ntf(int mt, int op_code, int pbf, int payload_len, int reason);
+#else
+extern void nfc_hal_nci_handle_ramdump_ntf();
+#endif
 
 /*****************************************************************************
 ** Local function prototypes
@@ -388,6 +442,76 @@ void nfc_hal_dm_send_reset_cmd (void)
 
     nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_reset_cmd, NCI_MSG_HDR_SIZE + NCI_CORE_PARAM_SIZE_RESET, NULL);
 }
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_init_ramdump_cmd
+**
+** Description      Send proprietary Initiate RAMDUMP command
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_init_ramdump_cmd (void)
+{
+    HAL_TRACE_DEBUG0("nfc_hal_dm_send_prop_init_ramdump_cmd: RAMDUMP: Sending NFCC Init CMD");
+    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_init_ramdump_cmd, NCI_MSG_HDR_SIZE, NULL);
+}
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_get_ramdump_cmd
+**
+** Description      Send proprietary Get RAMDUMP command
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_get_ramdump_cmd (int ramdump_start_addr, int ramdump_length)
+{
+    HAL_TRACE_DEBUG0("nfc_hal_dm_send_prop_get_ramdump_cmd: RAMDUMP: Sending NFCC Get CMD");
+
+    /* We are not interpreting the addr, this is why we havn't used unsigned int */
+    nfc_hal_dm_get_ramdump_cmd[3] = (ramdump_start_addr >> 24) & 0xFF;
+    nfc_hal_dm_get_ramdump_cmd[4] = (ramdump_start_addr >> 16) & 0xFF;
+    nfc_hal_dm_get_ramdump_cmd[5] = (ramdump_start_addr >> 8) & 0xFF;
+    nfc_hal_dm_get_ramdump_cmd[6] = ramdump_start_addr & 0xFF;
+
+    nfc_hal_dm_get_ramdump_cmd[7] = ramdump_length & 0xFF;
+    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_get_ramdump_cmd, NCI_MSG_HDR_SIZE + NCI_HAL_RAMDATA, NULL);
+}
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_end_ramdump_cmd
+**
+** Description      Send proprietary End RAMDUMP command
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_end_ramdump_cmd (void)
+{
+    HAL_TRACE_DEBUG0("nfc_hal_dm_send_prop_end_ramdump_cmd: RAMDUMP: Sending NFCC End CMD");
+    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_end_ramdump_cmd, NCI_MSG_HDR_SIZE, NULL);
+}
+
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_prop_reset_nfcc_ramdump_poke
+**
+** Description      Sends the NFCC a poke msg with a misalligned address
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_reset_nfcc_ramdump_poke (void)
+{
+    HAL_TRACE_DEBUG0("nfc_hal_dm_send_prop_reset_nfcc_ramdump_poke: RAMDUMP: Sending NFCC poke to cause reset");
+    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_ramdump_reset_nfcc, NCI_MSG_HDR_SIZE + 0x0D, NULL);
+}
+
 
 /*******************************************************************************
 **
@@ -1357,7 +1481,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
             else
             {
                 /* Call reset notification callback */
-                p++;                                /* Skip over param len */
+                UINT8 payload_len = *p++;
                 STREAM_TO_UINT8 (reset_reason, p);
                 STREAM_TO_UINT8 (reset_type, p);
                 HAL_TRACE_DEBUG2("RESET NTF Recieved before Pre Init: reset_reason = %d  reset_type = %d",reset_reason,reset_type);
@@ -1368,6 +1492,25 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             CORE_INIT again.
                */
                HAL_TRACE_DEBUG1(" nfc_hal_cb.dev_cb.initializing_state : %d",nfc_hal_cb.dev_cb.initializing_state);
+
+               if (NCI_HAL_RAMDUMP_REASON == reset_reason)
+               {
+                   HAL_TRACE_DEBUG0 ("nfc_hal_dm_proc_msg_during_init: RAMDUMP: A ramdump is available");
+                   reset_status = TRUE;
+
+#ifndef NDEBUG
+                   nfc_hal_nci_handle_ramdump_ntf(mt, op_code, pbf, payload_len, reset_reason);
+#else
+                   nfc_hal_nci_handle_ramdump_ntf();
+#endif
+               }
+#ifdef RAMDUMP
+               else
+               {
+                   /* Nothing to be sent back to NFCC */
+                   HAL_TRACE_DEBUG1 ("nfc_hal_dm_proc_msg_during_init: RAMDUMP: NFCC initialisation NTF received. No ramdump available as expected. Reason code 0x%x", reset_reason);
+               }
+#endif
 
                if((nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_PATCH_INFO))
                {

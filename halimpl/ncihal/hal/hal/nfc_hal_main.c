@@ -20,6 +20,21 @@
  *
  ******************************************************************************/
 
+/*****************************************************************************
+** Debug macro. Uncomment when we get past testing phase.
+*****************************************************************************/
+
+/*
+ * We use NDEBUG to hide some ramdump debug traces and asserts. We use RAMDUMP to output some additional nformation.
+ * Note: ramdump is not a production level feature.
+ */
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+
+#ifndef RAMDUMP
+#define RAMDUMP
+#endif
 
 /******************************************************************************
  *
@@ -66,12 +81,14 @@ sem_t semaphore_sleepcmd_complete;
 static void nfc_hal_main_userial_cback (tUSERIAL_PORT port, tUSERIAL_EVT evt, tUSERIAL_EVT_DATA *p_data);
 static void nfc_hal_main_handle_terminate (void);
 static void nfc_hal_main_timeout_cback (void *p_tle);
+static BOOLEAN isRamDumpCmd(NFC_HDR *p_msg);
 
 #if (NFC_HAL_DEBUG == TRUE)
 const char * const nfc_hal_init_state_str[] =
 {
     "IDLE",             /* Initialization is done                */
     "W4_XTAL_SET",      /* Waiting for crystal setting rsp       */
+    "W4_POST_XTAL_SET", /* Waiting for crystal reset ntf         */
     "W4_NFCC_ENABLE",   /* Waiting for reset ntf atter REG_PU up */
     "W4_BUILD_INFO",    /* Waiting for build info rsp            */
     "W4_PATCH_INFO",    /* Waiting for patch info rsp            */
@@ -79,7 +96,10 @@ const char * const nfc_hal_init_state_str[] =
     "W4_POST_INIT",     /* Waiting for complete of post init     */
     "W4_CONTROL",       /* Waiting for control release           */
     "W4_PREDISC",       /* Waiting for complete of prediscover   */
-    "CLOSING"           /* Shutting down                         */
+    "CLOSING",          /* Shutting down                         */
+    "PATCH_DOWNLOAD",   /* Waiting for patch download            */
+    "W4_RESET_INIT",    /* Waiting for reset rsp                 */
+    "RAMDUMP",          /* Ramdump in progress                   */
 };
 #endif
 
@@ -680,10 +700,30 @@ UINT32 nfc_hal_main_task (UINT32 param)
                 switch (p_msg->event & NFC_EVT_MASK)
                 {
                 case NFC_HAL_EVT_TO_NFC_NCI:
+                    HAL_TRACE_DEBUG0 ("nfc_hal_main_task(): Processing NFC_HAL_EVT_TO_NFC_NCI msg");
                     if (nfc_hal_dm_get_nfc_sleep_state())
                     {
                         nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
                     }
+                    if ((nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_RAMDUMP) && !isRamDumpCmd(p_msg))
+                    {
+                        /* if in ramdump state ignore sending other cmds */
+                        HAL_TRACE_DEBUG0 ("nfc_hal_main_task(): RAMDUMP: NFCC reset in progress. Only ramdump commands will be sent. Ignoring...");
+                        break; /* out of switch */
+                    }
+#ifdef RAMDUMP
+                    else if (nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_RAMDUMP)
+                    {
+                        /* If in ramdump state ramdump cmds should not come through this logic! */
+                        HAL_TRACE_DEBUG0 ("nfc_hal_main_task(): RAMDUMP: NFCC reset in progress. WARNING: Only ramdump commands should be sent but not through this logic. Something has gone wrong !!!");
+                    }
+                    else
+                    {
+                        /* Cmd being sent from upper layers down to NFCC */
+                        HAL_TRACE_DEBUG0 ("nfc_hal_main_task(): RAMDUMP: NOT in ramdump state. Sending some command.");
+                        isRamDumpCmd(p_msg);
+                    }
+#endif
                     nfc_hal_main_send_message (p_msg);
                     /* do not free buffer. NCI VS code may keep it for processing later */
                     free_msg = FALSE;
@@ -788,4 +828,36 @@ UINT8 HAL_NfcSetTraceLevel (UINT8 new_level)
         nfc_hal_cb.trace_level = new_level;
 
     return (nfc_hal_cb.trace_level);
+}
+
+/*******************************************************************************
+**
+** Function         isRamDumpCmd
+**
+** Description      Determines if the msg is a ramdump command.
+**                  This should NEVER be true as ramdump CMDs should not pass through here.
+**                  This layer is higher!
+**
+** Returns          TRUE is the msg is a Ramdump cmd, FALSE otherwise
+**
+*******************************************************************************/
+BOOLEAN isRamDumpCmd(NFC_HDR *p_msg)
+{
+    HAL_TRACE_DEBUG0 ("isRamDumpCmd(): RAMDUMP: Checking if command is a ramdump cmd.");
+
+    BOOLEAN ret = FALSE;
+
+    UINT8 *p = (UINT8 *) (p_msg + 1) + p_msg->offset;
+    if ((*p & (NCI_MTS_CMD | NCI_GID_PROP)) == (NCI_MTS_CMD | NCI_GID_PROP))
+    {
+        HAL_TRACE_DEBUG4 ("isRamDumpCmd(): RAMDUMP: Msg (0x%02x%02x%02x) is a ramdump cmd (starting with 0x%2x)", *p, *(p+1), *(p+2), (NCI_MTS_CMD | NCI_GID_PROP));
+        ret = TRUE;
+    }
+#ifdef RAMDUMP
+    else
+    {
+        HAL_TRACE_DEBUG0 ("isRamDumpCmd(): RAMDUMP: Msg is NOT a ramdump cmd");
+    }
+#endif
+    return ret;
 }

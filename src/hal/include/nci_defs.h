@@ -46,6 +46,8 @@ extern "C" {
 #define NCI_MAX_VSC_SIZE        0xFF
 #define NCI_VSC_MSG_HDR_SIZE    12  /* NCI header (3) + callback function pointer(8; use 8 to be safe) + HCIT (1 byte) */
 #define NCI_TL_SIZE             2
+#define NCI_HAL_RAMDATA         5   /* Reflects the Start address and Length of data requested */
+#define NCI_HAL_RAMDUMP_REASON  0xA0/* Reflects a ramdump is available */
 
 #define NCI_ISO_DEP_MAX_INFO      253   /* Max frame size (256) - Prologue (1) - Epilogue (2) in ISO-DEP, CID and NAD are not used*/
 #define NCI_NFC_DEP_MAX_DATA      251   /* Max payload (254) - Protocol Header (3) in NFC-DEP, DID and NAD are not used */
@@ -95,6 +97,11 @@ extern "C" {
 /* OID: Opcode Identifier (byte 1) */
 #define NCI_OID_MASK        0x3F
 #define NCI_OID_SHIFT       0
+
+/* OID: Opcode Identifier (byte 1) for RAMDUMP */
+#define NCI_OID_INIT        0x09
+#define NCI_OID_GET         0x0A
+#define NCI_OID_END         0x0B
 
 /* For routing */
 #define NCI_DH_ID               0   /* for DH */
