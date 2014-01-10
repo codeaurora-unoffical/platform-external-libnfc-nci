@@ -63,9 +63,24 @@ enum
     NFA_DM_API_REG_VSC_EVT,
     NFA_DM_API_SEND_VSC_EVT,
     NFA_DM_TIMEOUT_DISABLE_EVT,
+    NFA_DM_STORE_REASON_OF_SHUTDOWN,
+    NFA_DM_CHECK_DEVICE_RESET_STATUS,
     NFA_DM_MAX_EVT
 };
 
+/* data type for NFA_DM_STORE_REASON_OF_SHUTDOWN */
+typedef struct
+{
+    BT_HDR            hdr;
+    UINT8             reason;
+} tNFA_DM_STORE_REASON;
+
+/* data type for NFA_DM_CHECK_DEVICE_RESET_STATUS */
+typedef struct
+{
+    BT_HDR            hdr;
+    UINT8             status;
+} tNFA_DM_CHECK_STATUS;
 
 /* data type for NFA_DM_API_ENABLE_EVT */
 typedef struct
@@ -223,6 +238,8 @@ typedef union
     tNFA_DM_API_DEACTIVATE          deactivate;         /* NFA_DM_API_DEACTIVATE_EVT            */
     tNFA_DM_API_SEND_VSC            send_vsc;           /* NFA_DM_API_SEND_VSC_EVT              */
     tNFA_DM_API_REG_VSC             reg_vsc;            /* NFA_DM_API_REG_VSC_EVT               */
+    tNFA_DM_STORE_REASON            store_reason;       /* NFA_DM_STORE_REASON_OF_SHUTDOWN      */
+    tNFA_DM_CHECK_STATUS            reset_status;       /* NFA_DM_CHECK_DEVICE_RESET_STATUS     */
 } tNFA_DM_MSG;
 
 /* DM RF discovery state */
@@ -586,6 +603,8 @@ BOOLEAN nfa_dm_act_disable_timeout (tNFA_DM_MSG *p_data);
 BOOLEAN nfa_dm_act_nfc_cback_data (tNFA_DM_MSG *p_data);
 
 void nfa_dm_proc_nfcc_power_mode (UINT8 nfcc_power_mode);
+void nfa_dm_store_shutdown_reason(tNFA_DM_MSG *p_data);
+void nfa_dm_check_reset_status(tNFA_DM_MSG *p_data);
 
 /* Main function prototypes */
 BOOLEAN nfa_dm_evt_hdlr (BT_HDR *p_msg);

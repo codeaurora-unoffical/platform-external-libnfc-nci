@@ -343,13 +343,14 @@ void NfcAdaptation::HalTerminate ()
 ** Returns:     None.
 **
 *******************************************************************************/
-void NfcAdaptation::HalOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK* p_data_cback)
+void NfcAdaptation::HalOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK* p_data_cback, UINT8 reset_status)
 {
     const char* func = "NfcAdaptation::HalOpen";
     ALOGD ("%s", func);
     if (mHalDeviceContext)
     {
         mHalDeviceContext->common.reserved[0] = ANDROID_MODE;
+        mHalDeviceContext->common.reserved[1] = reset_status;
         mHalCallback = p_hal_cback;
         mHalDataCallback = p_data_cback;
         mHalDeviceContext->open (mHalDeviceContext, HalDeviceContextCallback, HalDeviceContextDataCallback);
@@ -365,10 +366,11 @@ void NfcAdaptation::HalOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK* p
 ** Returns:     None.
 **
 *******************************************************************************/
-void NfcAdaptation::HalClose ()
+void NfcAdaptation::HalClose (UINT8 close_reason)
 {
     const char* func = "NfcAdaptation::HalClose";
     ALOGD ("%s", func);
+    mHalDeviceContext->common.reserved[0] = close_reason;
     if (mHalDeviceContext)
     {
         mHalDeviceContext->close (mHalDeviceContext);
@@ -556,12 +558,12 @@ void NfcAdaptation::DownloadFirmware ()
 
     mHalOpenCompletedEvent.lock ();
     ALOGD ("%s: try open HAL", func);
-    HalOpen (HalDownloadFirmwareCallback, HalDownloadFirmwareDataCallback);
+    HalOpen (HalDownloadFirmwareCallback, HalDownloadFirmwareDataCallback, 0);
     mHalOpenCompletedEvent.wait ();
 
     mHalCloseCompletedEvent.lock ();
     ALOGD ("%s: try close HAL", func);
-    HalClose ();
+    HalClose (0);
     mHalCloseCompletedEvent.wait ();
 
     HalTerminate ();

@@ -121,7 +121,62 @@ tNFA_STATUS NFA_Enable (tNFA_DM_CBACK        *p_dm_cback,
 
     return (NFA_STATUS_FAILED);
 }
+/*****************************************************************************************
+**
+** Function         NFA_StoreShutdownReason
+**
+** Description      This function is called to store the reason of shut down in stack.
 
+** Returns          NFA_STATUS_OK if successfully initiated
+**                  NFA_STATUS_FAILED otherwise
+**
+*******************************************************************************************/
+tNFA_STATUS NFA_StoreShutdownReason (UINT8 reason)
+{
+    tNFA_DM_STORE_REASON *p_msg;
+
+    NFA_TRACE_API1 ("NFA_StoreShutdownReason (reason=%d)", reason);
+
+    if ((p_msg = (tNFA_DM_API_DISABLE *) GKI_getbuf (sizeof (tNFA_DM_API_DISABLE))) != NULL)
+    {
+        p_msg->hdr.event = NFA_DM_STORE_REASON_OF_SHUTDOWN;
+        p_msg->reason  = reason;
+
+        nfa_sys_sendmsg (p_msg);
+
+        return (NFA_STATUS_OK);
+    }
+
+    return (NFA_STATUS_FAILED);
+}
+/*******************************************************************************
+**
+** Function         NFA_CheckDeviceResetStatus
+**
+** Description      This function will collect information whether the device has
+**                  been reset and will pass this info further to HAL.
+**
+** Returns          void
+**
+*******************************************************************************/
+void NFA_CheckDeviceResetStatus (BOOLEAN status)
+{
+    tNFA_DM_CHECK_STATUS *p_msg;
+
+    NFA_TRACE_API1 ("NFA_CheckDeviceResetStatus (status=%X)", status);
+
+    if ((p_msg = (tNFA_DM_API_DISABLE *) GKI_getbuf (sizeof (tNFA_DM_API_DISABLE))) != NULL)
+    {
+        p_msg->hdr.event = NFA_DM_CHECK_DEVICE_RESET_STATUS;
+        p_msg->status  = status;
+
+        nfa_sys_sendmsg (p_msg);
+
+        return (NFA_STATUS_OK);
+    }
+
+    return (NFA_STATUS_FAILED);
+}
 /*******************************************************************************
 **
 ** Function         NFA_Disable
