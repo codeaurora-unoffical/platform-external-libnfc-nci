@@ -1426,26 +1426,18 @@ void nfa_ee_nci_disc_req_ntf(tNFA_EE_MSG *p_data)
             if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_A)
             {
                 p_cb->la_protocol = p_cbk->info[xx].info.req_info.protocol;
-                /*TODO: Remove below line (once nfcee app is ready) and se_prot_flag from EE Cb */
-                nfa_ee_cb.se_prot_flag |= 0x01;
             }
             else if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B)
             {
                 p_cb->lb_protocol = p_cbk->info[xx].info.req_info.protocol;
-                /*TODO: Remove below line (once nfcee app is ready) and se_prot_flag from EE Cb */
-                nfa_ee_cb.se_prot_flag |= 0x02;
             }
             else if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_F)
             {
                 p_cb->lf_protocol = p_cbk->info[xx].info.req_info.protocol;
-                /*TODO: Remove below line (once nfcee app is ready) and se_prot_flag from EE Cb */
-                nfa_ee_cb.se_prot_flag |= 0x04;
             }
             else if (p_cbk->info[xx].info.req_info.tech_n_mode == NFC_DISCOVERY_TYPE_LISTEN_B_PRIME)
             {
                 p_cb->lbp_protocol = p_cbk->info[xx].info.req_info.protocol;
-                /*TODO: Remove below line (once nfcee app is ready) and se_prot_flag from EE Cb */
-                nfa_ee_cb.se_prot_flag |= 0x08;
             }
         }
         else if (p_cbk->info[xx].op == NFC_EE_DISC_OP_REMOVE)

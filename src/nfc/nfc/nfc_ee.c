@@ -50,7 +50,18 @@
 *******************************************************************************/
 tNFC_STATUS NFC_NfceeDiscover (BOOLEAN discover)
 {
+#ifndef NFCEE_ACTION_DISABLE
+    if (discover == NCI_DISCOVER_ACTION_DISABLE)
+    {
+        return 1;
+    }
+    else
+    {
+        return nci_snd_nfcee_discover ((UINT8)NCI_DISCOVER_ACTION_ENABLE);
+    }
+#else
     return nci_snd_nfcee_discover ((UINT8) (discover ? NCI_DISCOVER_ACTION_ENABLE : NCI_DISCOVER_ACTION_DISABLE));
+#endif
 }
 
 /*******************************************************************************
