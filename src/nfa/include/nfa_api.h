@@ -709,7 +709,19 @@ NFC_API extern void NFA_Init (tHAL_NFC_ENTRY *p_hal_entry_tbl);
 NFC_API extern tNFA_STATUS NFA_Enable (tNFA_DM_CBACK       *p_dm_cback,
                                        tNFA_CONN_CBACK     *p_conn_cback);
 
-/*******************************************************************************
+/************************************************************************************
+**
+** Function         NFA_StoreShutdownReason
+**
+** Description      This function is called to store the reason of shut down in stack.
+
+** Returns          NFA_STATUS_OK if successfully initiated
+**                  NFA_STATUS_FAILED otherwise
+**
+**************************************************************************************/
+NFC_API extern tNFA_STATUS NFA_StoreShutdownReason (UINT8 reason);
+
+/*************************************************************************************
 **
 ** Function         NFA_Disable
 **
@@ -1241,6 +1253,17 @@ NFC_API extern tNFA_STATUS NFA_SendVsCommand (UINT8            oid,
 *******************************************************************************/
 NFC_API extern UINT8 NFA_SetTraceLevel (UINT8 new_level);
 
+/*******************************************************************************
+**
+** Function         NFA_CheckDeviceResetStatus
+**
+** Description      This function will collect information whether the device has
+**                  been reset and will pass this info further to HAL.
+**
+** Returns          void
+**
+*******************************************************************************/
+NFC_API extern void NFA_CheckDeviceResetStatus (BOOLEAN status);
 
 #ifdef __cplusplus
 }

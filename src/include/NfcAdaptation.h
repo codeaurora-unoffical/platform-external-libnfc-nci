@@ -93,8 +93,8 @@ private:
 
     static void HalInitialize ();
     static void HalTerminate ();
-    static void HalOpen (tHAL_NFC_CBACK* p_hal_cback, tHAL_NFC_DATA_CBACK* p_data_cback);
-    static void HalClose ();
+    static void HalOpen (tHAL_NFC_CBACK* p_hal_cback, tHAL_NFC_DATA_CBACK* p_data_cback, UINT8 reset_status);
+    static void HalClose (UINT8 close_reason);
     static void HalCoreInitialized (UINT8* p_core_init_rsp_params);
     static void HalWrite (UINT16 data_len, UINT8* p_data);
     static BOOLEAN HalPrediscover ();
