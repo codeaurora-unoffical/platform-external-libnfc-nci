@@ -399,7 +399,6 @@ typedef struct
     UINT8                ee_cfged;               /* the bit mask of configured ECBs  */
     UINT8                ee_cfg_sts;             /* configuration status             */
     tNFA_EE_FLAGS        ee_flags;               /* flags                           */
-    tNFA_EE_FLAGS        se_prot_flag;          /* the flags of this control block */
 } tNFA_EE_CB;
 
 /*****************************************************************************

@@ -40,11 +40,13 @@ static int hal_open (const struct nfc_nci_device *p_dev, nfc_stack_callback_t *p
 {
     int retval = 0;
     char mode = 0;
+    char reset_status = 0;
     nfc_dev_t *dev = (nfc_dev_t*) p_dev;
 
     mode = (char)dev->nci_device.common.reserved[0];
-    ALOGD ("nfc:hal_open: mode=%d ", mode);
-    retval = HaiOpen (dev, p_hal_cback, p_hal_data_callback, mode);
+    reset_status = (char)dev->nci_device.common.reserved[1];
+    ALOGD ("nfc:hal_open: mode=%d reset_status=%d", mode,reset_status);
+    retval = HaiOpen (dev, p_hal_cback, p_hal_data_callback, mode, reset_status);
     return retval;
 }
 
@@ -84,9 +86,13 @@ static int hal_pre_discover (const struct nfc_nci_device *p_dev)
 static int hal_close (const struct nfc_nci_device *p_dev)
 {
     int retval = 0;
+    char closing_reason = 0;
     nfc_dev_t* dev = (nfc_dev_t*) p_dev;
 
-    retval = HaiClose (dev);
+    closing_reason = (char)dev->nci_device.common.reserved[0];
+
+
+    retval = HaiClose (dev, closing_reason);
     return retval;
 }
 

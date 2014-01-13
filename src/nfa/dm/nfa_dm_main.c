@@ -79,7 +79,9 @@ const tNFA_DM_ACTION nfa_dm_action[] =
     nfa_dm_ndef_dereg_hdlr,             /* NFA_DM_API_DEREG_NDEF_HDLR_EVT       */
     nfa_dm_act_reg_vsc,                 /* NFA_DM_API_REG_VSC_EVT               */
     nfa_dm_act_send_vsc,                /* NFA_DM_API_SEND_VSC_EVT              */
-    nfa_dm_act_disable_timeout          /* NFA_DM_TIMEOUT_DISABLE_EVT           */
+    nfa_dm_act_disable_timeout,         /* NFA_DM_TIMEOUT_DISABLE_EVT           */
+    nfa_dm_store_shutdown_reason,       /* NFA_DM_STORE_REASON_OF_SHUTDOWN      */
+    nfa_dm_check_reset_status           /* NFA_DM_CHECK_DEVICE_RESET_STATUS     */
 };
 
 /*****************************************************************************
@@ -527,6 +529,11 @@ static char *nfa_dm_evt_2_str (UINT16 event)
     case NFA_DM_TIMEOUT_DISABLE_EVT:
         return "NFA_DM_TIMEOUT_DISABLE_EVT";
 
+    case NFA_DM_STORE_REASON_OF_SHUTDOWN:
+        return "NFA_DM_STORE_REASON_OF_SHUTDOWN";
+
+    case NFA_DM_CHECK_DEVICE_RESET_STATUS:
+        return "NFA_DM_CHECK_DEVICE_RESET_STATUS";
     }
 
     return "Unknown or Vendor Specific";
