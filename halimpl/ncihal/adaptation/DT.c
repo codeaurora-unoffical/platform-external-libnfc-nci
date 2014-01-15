@@ -1091,9 +1091,9 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
    }
    HAL_TRACE_DEBUG1 ("DT_Nfc_Open().Checking Device reset status.... reset_status = %d",reset_status);
    stored_restart_reson = nfc_hal_retrieve_info();
-   HAL_TRACE_DEBUG1 ("DT_Nfc_Open().stored_restart_reson = %d",stored_restart_reson);
+   HAL_TRACE_DEBUG2 ("DT_Nfc_Open().stored_restart_reson = %d current_mode=%d",stored_restart_reson,current_mode);
 
-   if((reset_status == TRUE) && (stored_restart_reson != NFCSERVICE_WATCHDOG_TIMER_EXPIRED))
+   if(((reset_status == TRUE) && (stored_restart_reson != NFCSERVICE_WATCHDOG_TIMER_EXPIRED))|| (current_mode == FTM_MODE))
    {
        DT_Set_Power(1);
        GKI_delay(100);
