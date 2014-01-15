@@ -2402,6 +2402,10 @@ static void nfa_dm_disc_sm_listen_sleep (tNFA_DM_RF_DISC_SM_EVENT event,
         {
             nfa_dm_disc_new_state (NFA_DM_RFST_DISCOVERY);
         }
+        else if (p_data->nfc_discover.deactivate.type == NFA_DEACTIVATE_TYPE_SLEEP)
+        {
+            NFA_TRACE_ERROR0 ("Ignore deactivation to sleep in listen sleep state");
+        }
         else
         {
             NFA_TRACE_ERROR0 ("Unexpected deactivation type");
