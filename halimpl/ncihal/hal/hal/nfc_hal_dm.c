@@ -52,6 +52,10 @@
 #define PATCH_NOT_UPDATED                    3
 #define PATCH_UPDATED                        4
 
+#define NFCA_PATCHFILE_V30_LOCATION  "/system/etc/firmware/Signedrompatch_v30.bin"
+#define NFCA_PATCHFILE_V20_LOCATION  "/system/etc/firmware/Signedrompatch_v20.bin"
+#define NFCA_PATCHFILE_V21_LOCATION  "/system/etc/firmware/Signedrompatch_v21.bin"
+#define NFCA_PATCHFILE_V24_LOCATION  "/system/etc/firmware/Signedrompatch_v24.bin"
 static UINT8 nfc_hal_dm_i93_rw_cfg[NFC_HAL_I93_RW_CFG_LEN] =
 {
     NCI_PARAM_ID_I93_DATARATE,
@@ -966,6 +970,146 @@ void nfc_hal_dm_frame_mem_access_cmd(UINT8 *nvmcmd,UINT8 *nvmupdatebuff,UINT8 *n
    *nvmcmdlen = datalen;
 }
 /*******************************************************************************
+**
+** Function         nfc_hal_dm_check_fused_nvm_file
+**
+** Description      Checks if the NVM update file is available in specified dir
+**                  if yes then reads updates one by one.
+**
+** Returns          int(TRUE if file is present or vice versa)
+**
+*******************************************************************************/
+int nfc_hal_dm_check_fused_nvm_file(UINT8 *nvmupdatebuff,UINT8 *nvmupdatebufflen)
+{
+    UINT32 patchdatalength  = 0,datalen=0,no_of_bytes_to_read=0;
+    UINT8 ch = 0,i=0,no_of_octets=0,octet_cnt=0,j=0,tmp_databuff[100]={0},k=0;
+    UINT8 num_of_update[5]={0},cnt=0;
+    fpos_t position=0;
+    UINT8 nvm_read_req = FALSE;
+    char pNvmfilepath[100] = {0};
+
+    if(GetStrValue("FUSED_NVM_FILE_PATH", &pNvmfilepath[0], sizeof(pNvmfilepath)))
+    {
+        HAL_TRACE_DEBUG1("FUSED_NVM_FILE_PATH found: %s",pNvmfilepath);
+    }
+    else
+    {
+        HAL_TRACE_DEBUG0("FUSED_NVM_FILE_PATH not found");
+    }
+
+    if(!nfc_hal_cb.nvm.p_Nvm_file)
+    {
+        /*nvm update file is opened only once */
+        nfc_hal_cb.nvm.p_Nvm_file = fopen(pNvmfilepath,"rb");
+        if(nfc_hal_cb.nvm.p_Nvm_file)
+        {
+            while((ch != '\n'))
+            {
+                ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+                num_of_update[cnt++] = ch;
+            }
+            nfc_hal_cb.nvm.no_of_updates = atoi((const char*)num_of_update);
+            nfc_hal_cb.nvm.nvm_updated = TRUE;
+        }
+        else
+        {
+            /*NVM Update file is not present*/
+            HAL_TRACE_DEBUG0("NVM Update file is not present");
+            return FALSE;
+        }
+    }
+
+    if(nfc_hal_cb.nvm.p_Nvm_file)
+    {
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);       // discard LF (new line char)
+
+     //   HAL_TRACE_DEBUG1("Test11 ch=%X",ch);
+
+        ch = 0;
+
+        /* read entry type.*/
+        nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+
+        if(nvmupdatebuff[i-1] == 6)
+        {
+            /*discard first space character*/
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+            /*NVM Read request.Read extra subcode byte from file*/
+            nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+            nvm_read_req = TRUE;
+        }
+
+        /*discard first space character*/
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+        /*Now read the Tag/Register index*/
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard 0
+        ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard x
+
+        if(nvm_read_req != TRUE)
+        {
+            while(i !=5)
+                nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+        }
+        else
+        {
+            while(i !=6)
+                nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+        }
+
+        if(nvm_read_req != TRUE)
+        {
+            /* discard second space*/
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+            /*Now read the value*/
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard 0
+            ch = fgetc(nfc_hal_cb.nvm.p_Nvm_file);    // discard x
+
+            while(i != 9)
+                nvmupdatebuff[i++] = fgetc(nfc_hal_cb.nvm.p_Nvm_file);
+
+        }
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_frame_fused_mem_access_cmd
+**
+** Description     Prepares the fused NVM NCI Cmd with the provided update data
+**
+**
+** Returns         void
+**
+*******************************************************************************/
+void nfc_hal_dm_frame_fused_mem_access_cmd(UINT8 *nvmcmd,UINT8 *nvmupdatebuff,UINT8 *nvmcmdlen)
+{
+    UINT8 num_of_data_bytes = 0,j=0,datalen=0;
+
+   nvmcmd[datalen++] = 0x2F;
+   nvmcmd[datalen++] = 0x01;
+
+   if(nvmupdatebuff[0] == 6)
+   {
+       nvmcmd[datalen++] = NUM_OF_BYTES_READ_SUB_OPCODE + NUM_OF_BYTES_START_ADDR;
+
+       for(;datalen<(NUM_OF_BYTES_READ_SUB_OPCODE + NUM_OF_BYTES_START_ADDR+3);datalen++)
+           nvmcmd[datalen] = nvmupdatebuff[j++];
+
+   }
+   else
+   {
+       //value 4 bytes include by multiplying 2 in tag/register index bytes
+       nvmcmd[datalen++] = NUM_OF_BYTES_WRITE_SUB_OPCODE + (NUM_OF_BYTES_START_ADDR*2);
+
+       for(;datalen<(NUM_OF_BYTES_WRITE_SUB_OPCODE + (NUM_OF_BYTES_START_ADDR*2)+3);datalen++)
+           nvmcmd[datalen] = nvmupdatebuff[j++];
+
+   }
+   *nvmcmdlen = datalen;
+}
+/*******************************************************************************
 ** Function         nfc_hal_dm_send_get_build_info_cmd
 **
 ** Description      Send NCI_MSG_GET_BUILD_INFO CMD
@@ -1005,20 +1149,57 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
     UINT8 nvmupdatebuff[260] = {0}, nvmdatabufflen = 0;
     UINT8 *nvmcmd = NULL;
     UINT32 patch_update_flag = 0, nvm_update_flag = 0;
-    UINT32 patch_version = 0;
-    char patchfilepath[100] = {0}, prepatchfilepath[100] = {0};
+    UINT32 patch_version = 0,fused_nvm_flag=0;
+    char patchfilepath[50] = {0}, prepatchfilepath[50] = {0};
+    size_t str_len = 0;
 
     HAL_TRACE_DEBUG1 ("nfc_hal_dm_proc_msg_during_init(): init state:%d", nfc_hal_cb.dev_cb.initializing_state);
     GetNumValue("PATCH_UPDATE_ENABLE_FLAG", &patch_update_flag, sizeof(patch_update_flag));
     GetNumValue("NVM_UPDATE_ENABLE_FLAG", &nvm_update_flag, sizeof(nvm_update_flag));
-    if(GetStrValue("FW_PATCH", &patchfilepath[0], sizeof(patchfilepath)))
+    GetNumValue("FUSED_NVM_UPDATE_ENABLE_FLAG", &fused_nvm_flag, sizeof(fused_nvm_flag));
+    if(nfc_hal_cb.dev_cb.store_path == FALSE)
     {
-        HAL_TRACE_DEBUG1("FW_PATCH found: %s",patchfilepath);
+        /*Select patch file based on chip revision*/
+        if((nfc_hal_cb.dev_cb.nfcc_chip_version == 3) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+        {
+            /*NFCC 3.0*/
+            HAL_TRACE_DEBUG0("NFCC 3.0");
+            if(GetStrValue("FW_PATCH_30", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_30 found: %s",patchfilepath);
+            }
+        }
+        else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+        {
+            /*NFCC 2.0*/
+            HAL_TRACE_DEBUG0("NFCC 2.0");
+            if(GetStrValue("FW_PATCH_20", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_20 found: %s",patchfilepath);
+            }
+        }
+        else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 1))
+        {
+            /*NFCC 2.1*/
+            HAL_TRACE_DEBUG0("NFCC 2.1");
+            if(GetStrValue("FW_PATCH_21", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_21 found: %s",patchfilepath);
+            }
+        }
+        else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 4))
+        {
+            /*NFCC 2.4*/
+            HAL_TRACE_DEBUG0("NFCC 2.4");
+            if(GetStrValue("FW_PATCH_24", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_24 found: %s",patchfilepath);
+            }
+        }
+        /* Make this flag true so that if file is available or not , next time the patch will not be read*/
+        nfc_hal_cb.dev_cb.store_path = TRUE;
     }
-    else
-    {
-        HAL_TRACE_DEBUG0("FW_PATCH not found");
-    }
+
     if(GetStrValue("FW_PRE_PATCH", &prepatchfilepath[0], sizeof(prepatchfilepath)))
     {
         HAL_TRACE_DEBUG1("FW_PRE_PATCH found: %s",prepatchfilepath);
@@ -1086,15 +1267,53 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             {
                                 HAL_TRACE_DEBUG0("PATCH Update: Pre patch file is not available");
                             }
-
+                            HAL_TRACE_DEBUG1("patchfilepath: %s",patchfilepath);
                             nfc_hal_cb.dev_cb.patch_file_available = nfc_hal_patch_read(patchfilepath,&patchdata,&patchdatalen);
                             if(nfc_hal_cb.dev_cb.patch_file_available)
                             {
-                                HAL_TRACE_DEBUG1 ("PATCH Update: Patch file length is ==%d \n\n",patchdatalen);
+                                HAL_TRACE_DEBUG1 ("PATCH Update: Found file based on chip version . Patch file length is ==%d \n\n",patchdatalen);
                             }
                             else
                             {
-                                HAL_TRACE_DEBUG0("PATCH Update: Patch file is not available");
+                                /* case : if FW patch is not available at the path provided in the conf file.Then look for patch
+                                          at default location*/
+                                HAL_TRACE_DEBUG0("FW_PATCH path not found in config file .Reading default one");
+                                /*Select patch file based on chip revision*/
+                                if((nfc_hal_cb.dev_cb.nfcc_chip_version == 3) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+                                {
+                                    /*NFCC 3.0*/
+                                    str_len = strlen(NFCA_PATCHFILE_V30_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V30_LOCATION,str_len);
+                                }
+                                else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+                                {
+                                    /*NFCC 2.0*/
+                                    str_len = strlen(NFCA_PATCHFILE_V20_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V20_LOCATION,str_len);
+                                }
+                                else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 1))
+                                {
+                                    /*NFCC 2.1*/
+                                    str_len = strlen(NFCA_PATCHFILE_V21_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V21_LOCATION,str_len);
+                                }
+                                else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 4))
+                                {
+                                    /*NFCC 2.4*/
+                                    str_len = strlen(NFCA_PATCHFILE_V24_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V24_LOCATION,str_len);
+                                }
+
+                                nfc_hal_cb.dev_cb.patch_file_available = nfc_hal_patch_read(patchfilepath,&patchdata,&patchdatalen);
+
+                                if(nfc_hal_cb.dev_cb.patch_file_available)
+                                {
+                                    HAL_TRACE_DEBUG1 ("PATCH Update: Patch file length is ==%d \n\n",patchdatalen);
+                                }
+                                else
+                                {
+                                    HAL_TRACE_DEBUG0("PATCH Update: Patch file is not available");
+                                }
                             }
 
                             /*Check if Prepatch file is relevent for patch file if prepatch exist */
@@ -1108,7 +1327,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             {
                                 patch_update = TRUE;
                             }
-                            if(patch_update)
+                            if((patch_update == TRUE) && (nfc_hal_cb.dev_cb.patch_file_available == TRUE))
                             {
                                 /* Files validated ,start patch update process*/
                                 nfc_hal_cb.dev_cb.patch_applied = FALSE;
@@ -1120,6 +1339,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             else
                             {
                                 HAL_TRACE_DEBUG0("PATCH Update : Validation Failed, Patch Update Cancled..Doing normal Initialization");
+                                patch_update = FALSE;
                                 NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
                                 HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
                             }
@@ -1166,14 +1386,14 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
             {
                 if (mt == NCI_MT_RSP)
                 {
-                    if(nvm_update_flag == TRUE)
+                    if((nvm_update_flag == TRUE) && (fused_nvm_flag == FALSE))
                     {
                         /*Check if NVM update file is available*/
                         if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates >0))
                         {
                             /*nvm update file is present . Send update before patch data*/
                             /* frame cmd now*/
-                            nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
+                            nvmcmd= (UINT8*)malloc(nvmdatabufflen+15);
                             if(nvmcmd)
                             {
                                 nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
@@ -1183,7 +1403,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                                 /*mem allocation failed */
                                 return;
                             }
-                            /* send nvm update cmd(NCI POKE) to NFCC*/
+                            /* send nvm update cmd to NFCC*/
                             nfc_hal_cb.nvm.no_of_updates--;
                             nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
                             free(nvmcmd);
@@ -1393,7 +1613,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
     {
         if (gid == NCI_GID_PROP) /* this is for download patch */
         {
-            if(nvm_update_flag)
+            if((nvm_update_flag == TRUE) && (fused_nvm_flag == FALSE))
             {
                 /* check if more nvm updates are to be sent */
                 if(nfc_hal_cb.nvm.no_of_updates > 0)
@@ -1401,11 +1621,11 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                     if(nfc_hal_dm_check_nvm_file(nvmupdatebuff,&nvmdatabufflen) && (nfc_hal_cb.nvm.no_of_updates > 0))
                     {
                         /* frame cmd now*/
-                        nvmcmd= (UINT8*)malloc(nvmdatabufflen+10);
+                        nvmcmd= (UINT8*)malloc(nvmdatabufflen+15);
                         if(nvmcmd)
                         {
                             nfc_hal_dm_frame_mem_access_cmd(nvmcmd,nvmupdatebuff,&nvmcmdlen);
-                            /* send nvm update cmd(NCI POKE) to NFCC*/
+                            /* send nvm update cmd to NFCC*/
                             nfc_hal_cb.nvm.no_of_updates--;
                             nfc_hal_dm_send_nci_cmd (nvmcmd, nvmcmdlen, NULL);
                             free(nvmcmd);
