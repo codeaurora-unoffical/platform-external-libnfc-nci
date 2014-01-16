@@ -1087,6 +1087,9 @@ NFC_RETURN_CODE DT_Nfc_Open(DT_Nfc_sConfig_t *pDriverConfig, void **pdTransportH
    chip_revid = DT_Get_Nfcc_Version(1);
    metal_version = (chip_revid & (0xF));
    ALOGD("DT:DT_Nfc_Open : chip version = %d.%d\n", chip_version_major, metal_version);
+   /*Store chip version and metal revision in HAL CB.Used in patch propogation*/
+   nfc_hal_cb.dev_cb.nfcc_chip_version = chip_version_major;
+   nfc_hal_cb.dev_cb.nfcc_chip_metal_version = metal_version;
 
    /* Create reader thread */
    GKI_create_task ((TASKPTR)DT_read_thread, USERIAL_HAL_TASK, (INT8*)"USERIAL_HAL_TASK", 0, 0, (pthread_cond_t*)NULL, NULL);
