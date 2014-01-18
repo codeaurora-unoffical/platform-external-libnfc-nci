@@ -183,6 +183,10 @@ static void nfa_dm_set_init_nci_params (void)
     {
         NFC_DiscoveryMap (nfa_dm_num_dm_interface_mapping, p_nfa_dm_interface_mapping, NULL);
     }
+
+    UINT8 default_listen_mode_routing_table[5]= {0x01,0x03,0x00,0x01,0x05};
+
+    NFC_SetRouting(0,0,1,5,default_listen_mode_routing_table);
 }
 
 /*******************************************************************************
