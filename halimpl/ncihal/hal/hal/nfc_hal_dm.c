@@ -447,7 +447,7 @@ void nfc_hal_dm_send_reset_cmd (void)
 **
 ** Function         nfc_hal_dm_send_init_ramdump_cmd
 **
-** Description      Send NCI Initiate RAMDUMP command
+** Description      Send proprietary Initiate RAMDUMP command
 **
 ** Returns          void
 **
@@ -462,7 +462,7 @@ void nfc_hal_dm_send_prop_init_ramdump_cmd (void)
 **
 ** Function         nfc_hal_dm_send_get_ramdump_cmd
 **
-** Description      Send NCI Get RAMDUMP command
+** Description      Send proprietary Get RAMDUMP command
 **
 ** Returns          void
 **
@@ -485,7 +485,7 @@ void nfc_hal_dm_send_prop_get_ramdump_cmd (int ramdump_start_addr, int ramdump_l
 **
 ** Function         nfc_hal_dm_send_end_ramdump_cmd
 **
-** Description      Send NCI End RAMDUMP command
+** Description      Send proprietary End RAMDUMP command
 **
 ** Returns          void
 **
@@ -2209,7 +2209,7 @@ static void nci_nfc_lp_timeout_cback (void *p_tle)
 **
 ** Function         nfc_hal_dm_send_prop_nci_region2_control_enable_cmd
 **
-** Description      Sends NCI command to NFCC to inform that region2 enable/disable
+** Description      Sends proprietary command to NFCC to inform that region2 enable/disable
 **                  will be controlled by DH.
 **
 ** Returns          void
@@ -2232,7 +2232,7 @@ void nfc_hal_dm_send_prop_nci_region2_control_enable_cmd(UINT8 debaug_status)
 **
 ** Function         nfc_hal_dm_send_prop_nci_region2_enable_cmd
 **
-** Description      Sends NCI command to NFCC to put it in Region 2
+** Description      Sends proprietary command to NFCC to put it in Region 2
 **                  operating mode.
 **
 ** Returns          void
