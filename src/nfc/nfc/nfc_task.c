@@ -45,6 +45,7 @@
 #include "nfa_dm_int.h"
 #endif
 
+extern UINT8 shutingdown_reason;
 /*******************************************************************************
 **
 ** Function         nfc_start_timer
@@ -320,7 +321,7 @@ void nfc_task_shutdown_nfcc (void)
     if (nfc_cb.flags & NFC_FL_POWER_OFF_SLEEP)
     {
         nfc_set_state (NFC_STATE_W4_HAL_CLOSE);
-        nfc_cb.p_hal->close();
+        nfc_cb.p_hal->close(shutingdown_reason);
     }
     else if (nfc_cb.flags & NFC_FL_POWER_CYCLE_NFCC)
     {
@@ -330,7 +331,7 @@ void nfc_task_shutdown_nfcc (void)
     else
     {
         nfc_set_state (NFC_STATE_W4_HAL_CLOSE);
-        nfc_cb.p_hal->close();
+        nfc_cb.p_hal->close(shutingdown_reason);
 
         /* Perform final clean up */
         llcp_cleanup ();

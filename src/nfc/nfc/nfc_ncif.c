@@ -391,7 +391,8 @@ BOOLEAN nfc_ncif_process_event (BT_HDR *p_msg)
         /* make sure this is the RSP we are waiting for before updating the command window */
         if ((old_gid != gid) || (old_oid != oid))
         {
-            NFC_TRACE_ERROR2 ("nfc_ncif_process_event unexpected rsp: gid:0x%x, oid:0x%x", gid, oid);
+            NFC_TRACE_ERROR2 ("nfc_ncif_process_event unexpected rsp: gid:0x%x, oid:0x%x > Stopping cmd pending timer", gid, oid);
+            nfc_stop_timer (&nfc_cb.nci_wait_rsp_timer);
             return TRUE;
         }
 
@@ -1321,7 +1322,7 @@ void nfc_ncif_proc_reset_rsp (UINT8 *p, BOOLEAN is_ntf)
 
     if (status == NCI_STATUS_OK)
     {
-        if ((*p) != NCI_VERSION)
+        if (((*p) != NCI_VERSION)&& (*(p-1) != 0xA0 ))
         {
             NFC_TRACE_DEBUG2 ("NCI version mismatch!!:0x%02x != 0x%02x ", NCI_VERSION, *p);
             if ((*p) < NCI_VERSION_0_F)

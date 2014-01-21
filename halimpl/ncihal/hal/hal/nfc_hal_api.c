@@ -33,7 +33,10 @@
 #include "nfc_hal_api.h"
 #include "nfc_hal_int.h"
 
+#define USER_DISABLED_FROM_UI     1
 char current_mode = 0;
+UINT8 shut_down_reason = 0;
+UINT8 reset_status = 0;
 /*******************************************************************************
 ** NFC_HAL_TASK declarations
 *******************************************************************************/
@@ -106,7 +109,7 @@ void HAL_NfcTerminate(void)
 ** Returns          void
 **
 *******************************************************************************/
-void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback, char mode)
+void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback, char mode, char status)
 {
     HAL_TRACE_API1 ("HAL_NfcOpen (): mode=%d",mode);
 
@@ -114,6 +117,8 @@ void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback
     if (p_hal_cback)
     {
         current_mode = mode;
+        /* reset_status will store infor if hal initialization is happening due to device reset*/
+        reset_status = status;
         nfc_hal_dm_init ();
         nfc_hal_cb.p_stack_cback = p_hal_cback;
         nfc_hal_cb.p_data_cback  = p_data_cback;
@@ -133,9 +138,15 @@ void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback
 ** Returns          void
 **
 *******************************************************************************/
-void HAL_NfcClose (void)
+void HAL_NfcClose (UINT8 closing_reason)
 {
     HAL_TRACE_API0 ("HAL_NfcClose ()");
+    shut_down_reason = closing_reason;
+
+    if (shut_down_reason == USER_DISABLED_FROM_UI)
+    {
+         HAL_TRACE_API0 ("NFC disabled by User");
+    }
 
     /* Only handle if HAL is opened (stack cback is not-NULL) */
     if (nfc_hal_cb.p_stack_cback)
