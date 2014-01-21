@@ -160,8 +160,11 @@ extern NFC_HAL_TRANS_CFG_QUALIFIER tNFC_HAL_TRANS_CFG nfc_hal_trans_cfg;
 #define ERROR                                 3
 #define REGION2_CONTROL_DISABLE               0
 #define REGION2_CONTROL_ENABLE                1
-#define STORE_INFO                            1
-#define REMOVE_INFO                           0
+#define STORE_INFO_DEBUG_ENABLE               '1'
+#define DEVICE_POWER_CYCLED                   '0'
+#define REMOVE_INFO                           '0'
+#define STROE_INFO_NFC_DISABLED               '2'
+#define NFCSERVICE_WATCHDOG_TIMER_EXPIRED     '4'
 
 /****************************************************************************************
 ** Internal constants and definitions
@@ -250,7 +253,8 @@ enum
     NFC_HAL_INIT_STATE_W4_PREDISCOVER_DONE,/* Waiting for complete of prediscover   */
     NFC_HAL_INIT_STATE_CLOSING,            /* Shutting down                         */
     NFC_HAL_INIT_FOR_PATCH_DNLD,           /* hal init for patch download to happen*/
-    NFC_HAL_INIT_STATE_W4_RE_INIT          /* Waiting for reset rsp on ReInit       */
+    NFC_HAL_INIT_STATE_W4_RE_INIT,         /* Waiting for reset rsp on ReInit       */
+    NFC_HAL_INIT_STATE_RAMDUMP             /* NFCC reset. Ramdump initiation        */
 };
 
 typedef struct
@@ -443,6 +447,10 @@ typedef struct
     UINT8                    patch_file_available;           /* This flag will be set if patch file is available*/
     UINT8                    patch_dnld_conn_close_delay;    /* This flag will enable 4 sec or configured delay for the conn close after
                                                                 patch is downloaded*/
+    UINT8                    nfcc_chip_version;               /* Chip version used in propogating patch*/
+    UINT8                    nfcc_chip_metal_version;         /* Chip Metal version used in propogating patch*/
+    UINT8                    store_path;                      /* flag to keep track whether path of relevent patch file as per NFCC version
+                                                                 is stored or not */
 } tNFC_HAL_DEV_CB;
 
 /* data members for NFC_HAL-HCI */
@@ -543,6 +551,13 @@ void nfc_hal_dm_shutting_down_nfcc (void);
 BOOLEAN nfc_hal_dm_power_mode_execute (tNFC_HAL_LP_EVT event);
 void nfc_hal_dm_send_pend_cmd (void);
 tHAL_NFC_STATUS nfc_hal_dm_set_config (UINT8 tlv_size, UINT8 *p_param_tlvs, tNFC_HAL_NCI_CBACK *p_cback);
+void nfc_hal_dm_send_prop_init_ramdump_cmd (void);
+void nfc_hal_dm_send_prop_get_ramdump_cmd (int ramdump_start_addr, int ramdump_length);
+void nfc_hal_dm_send_prop_end_ramdump_cmd (void);
+void nfc_hal_dm_send_prop_reset_nfcc_ramdump_poke (void);
+void nfc_hal_store_info(UINT8 operation);
+void nfc_hal_dm_send_prop_nci_region2_enable_cmd(UINT8 debaug_status);
+char nfc_hal_retrieve_info(void);
 
 /* nfc_hal_prm.c */
 void nfc_hal_prm_spd_reset_ntf (UINT8 reset_reason, UINT8 reset_type);

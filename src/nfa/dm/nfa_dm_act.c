@@ -48,6 +48,14 @@
 #include "nfa_snep_int.h"
 #endif
 
+/*This global variable will be passed to HAL to indicate that the reason of shutdown
+   is disable of NFC from UI or not*/
+UINT8 shutingdown_reason;
+
+/*This global variable will be passed to HAL to indicate that if initialization
+   of HAL is  happening due to device reset or not */
+UINT8 reset_status;
+#define NFCSERVICE_WATCHDOG_TRIGGERED 4
 /* This is the timeout value to guarantee disable is performed within reasonable amount of time */
 #ifndef NFA_DM_DISABLE_TIMEOUT_VAL
 #define NFA_DM_DISABLE_TIMEOUT_VAL         1000
@@ -183,6 +191,10 @@ static void nfa_dm_set_init_nci_params (void)
     {
         NFC_DiscoveryMap (nfa_dm_num_dm_interface_mapping, p_nfa_dm_interface_mapping, NULL);
     }
+
+    UINT8 default_listen_mode_routing_table[5]= {0x01,0x03,0x00,0x01,0x05};
+
+    NFC_SetRouting(0,0,1,5,default_listen_mode_routing_table);
 }
 
 /*******************************************************************************
@@ -457,6 +469,40 @@ BOOLEAN nfa_dm_enable (tNFA_DM_MSG *p_data)
     }
 
     return (TRUE);
+}
+/*******************************************************************************
+**
+** Function         nfa_dm_store_shutdown_reason
+**
+** Description      It will store the reason of shut down which will be passed to
+**                  HAL later when shut down will happen
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfa_dm_store_shutdown_reason(tNFA_DM_MSG *p_data)
+{
+    shutingdown_reason = p_data->store_reason.reason;
+    if(shutingdown_reason == NFCSERVICE_WATCHDOG_TRIGGERED)
+    {
+        /*Inform this evt to ncihal .Call NFC_disbale as after this nfc service
+          will abort and start again*/
+        NFC_Disable();
+    }
+}
+/*******************************************************************************
+**
+** Function         nfa_dm_check_reset_status
+**
+** Description      It will store information coming from JNI layer that device is
+**                  actually reset or nfc is being again enabled by settings UI
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfa_dm_check_reset_status(tNFA_DM_MSG *p_data)
+{
+    reset_status = p_data->reset_status.status;
 }
 
 /*******************************************************************************

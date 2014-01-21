@@ -87,8 +87,8 @@ typedef void (tHAL_NFC_DATA_CBACK) (UINT16 data_len, UINT8   *p_data);
 
 typedef void (tHAL_API_INITIALIZE) (void);
 typedef void (tHAL_API_TERMINATE) (void);
-typedef void (tHAL_API_OPEN) (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback);
-typedef void (tHAL_API_CLOSE) (void);
+typedef void (tHAL_API_OPEN) (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback, UINT8 reset_status);
+typedef void (tHAL_API_CLOSE) (UINT8 close_reason);
 typedef void (tHAL_API_CORE_INITIALIZED) (UINT8 *p_core_init_rsp_params);
 typedef void (tHAL_API_WRITE) (UINT16 data_len, UINT8 *p_data);
 typedef BOOLEAN (tHAL_API_PREDISCOVER) (void);
@@ -174,7 +174,7 @@ EXPORT_HAL_API void HAL_NfcTerminate(void);
 ** Returns          void
 **
 *******************************************************************************/
-EXPORT_HAL_API void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback, char mode);
+EXPORT_HAL_API void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBACK *p_data_cback, char mode, char status);
 
 /*******************************************************************************
 **
@@ -186,7 +186,7 @@ EXPORT_HAL_API void HAL_NfcOpen (tHAL_NFC_CBACK *p_hal_cback, tHAL_NFC_DATA_CBAC
 ** Returns          void
 **
 *******************************************************************************/
-EXPORT_HAL_API void HAL_NfcClose (void);
+EXPORT_HAL_API void HAL_NfcClose (UINT8 closing_reason);
 
 /*******************************************************************************
 **
