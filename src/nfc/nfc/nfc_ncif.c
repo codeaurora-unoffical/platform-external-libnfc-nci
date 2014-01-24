@@ -378,7 +378,7 @@ BOOLEAN nfc_ncif_process_event (BT_HDR *p_msg)
     case NCI_MT_DATA:
         NFC_TRACE_DEBUG0 ("NFC received data");
         nfc_ncif_proc_data (p_msg);
-        free = FALSE;
+        free = TRUE;
         break;
 
     case NCI_MT_RSP:
@@ -1112,23 +1112,59 @@ void nfc_ncif_proc_ee_discover_req (UINT8 *p, UINT16 plen)
         p_info                  = ee_disc_req.info;
         if (plen)
             plen--;
-        while ((u8 > 0) && (plen >= NFC_EE_DISCOVER_ENTRY_LEN))
+
+        while ((u8 > 0) && (plen > 0))
         {
-            p_info->op  = *p++;                  /* T */
-            if (*p != NFC_EE_DISCOVER_INFO_LEN)/* L */
+            p_info->op = *p++;                  /* T */
+            switch (p_info->op)
             {
-                NFC_TRACE_DEBUG1 ("bad entry len:%d", *p );
-                return;
+                case NFC_EE_DISC_OP_ADD:
+                case NFC_EE_DISC_OP_REMOVE:
+                    if (  (*p != NFC_EE_DISCOVER_REQ_INFO_LEN)    /* L */
+                        ||(plen < NFC_EE_DISCOVER_REQ_ENTRY_LEN)  )
+                    {
+                        NFC_TRACE_DEBUG1 ("bad len for DISC_REQ:%d", *p );
+                        return;
+                    }
+                    p++;
+                    /* V */
+                    p_info->nfcee_id                  = *p++;
+                    p_info->info.req_info.tech_n_mode = *p++;
+                    p_info->info.req_info.protocol    = *p++;
+                    u8--;
+                    plen -= NFC_EE_DISCOVER_REQ_ENTRY_LEN;
+                    p_info++;
+                    break;
+
+                case NFC_EE_DISC_OP_SAK_INFO:
+                    if (  (*p != NFC_EE_SAK_INFO_LEN)        /* L */
+                        ||(plen < NFC_EE_SAK_ENTRY_LEN)  )
+                    {
+                        NFC_TRACE_DEBUG1 ("bad len for SAK:%d", *p );
+                        return;
+                    }
+                    p++;
+                    /* V */
+                    p_info->nfcee_id          = *p++;
+                    p_info->info.sak_info.sak = *p++;
+                    u8--;
+                    plen -= NFC_EE_SAK_ENTRY_LEN;
+                    p_info++;
+                    break;
+
+                default:
+                    NFC_TRACE_DEBUG1 ("Unknown type:0x%x", *p );
+                    p++;
+                    if (plen < (*p + 2))
+                        return;
+                    plen -= (*p + 2);
+                    p += (*p + 1);     /* move to next TLV */
+                    u8--;
+                    ee_disc_req.num_info--;
+                    break;
             }
-            p++;
-            /* V */
-            p_info->nfcee_id    = *p++;
-            p_info->tech_n_mode = *p++;
-            p_info->protocol    = *p++;
-            u8--;
-            plen    -=NFC_EE_DISCOVER_ENTRY_LEN;
-            p_info++;
         }
+
         (*p_cback) (NFC_EE_DISCOVER_REQ_REVT, (tNFC_RESPONSE *) &ee_disc_req);
     }
 
