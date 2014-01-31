@@ -146,7 +146,7 @@ static void nfc_hal_main_open_transport (void)
     }
     else{
        HAL_TRACE_ERROR0 ("DT_Nfc_Open: Fails");
-       nfc_hal_main_send_error (HAL_NFC_STATUS_ERR_TRANSPORT);
+       nfc_hal_main_pre_init_done (HAL_NFC_STATUS_FAILED);
     }
 }
 
