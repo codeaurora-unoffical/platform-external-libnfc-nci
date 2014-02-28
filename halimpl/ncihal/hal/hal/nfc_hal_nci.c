@@ -665,7 +665,7 @@ BOOLEAN nfc_hal_nci_preproc_rx_nci_msg (NFC_HDR *p_msg)
         }
         if (gid == NCI_GID_PROP && mt == NCI_MT_RSP && (op_code == NCI_OID_INIT || op_code == NCI_OID_GET || op_code == NCI_OID_END))
         {
-            HAL_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg: RAMDUMP: Got a NFCC NCI_MT_RSP");
+            HAL_TRACE_DEBUG0 ("nfc_hal_nci_preproc_rx_nci_msg: RAMDUMP: Got a proprietary NFCC NCI_MT_RSP");
 #ifndef NDEBUG
             nfc_hal_nci_handle_ramdump_rsp(mt, op_code, pbf, payload_len, p);
 #else
@@ -1337,7 +1337,7 @@ void HAL_NfcSetMaxRfDataCredits (UINT8 max_credits)
 **
 ** Description      On receiving a ramdump notification performs some initial checks before processing.
 **
-** Precondition     The reason code is 0xA0
+** Precondition     The proprietary reason code is 0xA0
 **
 ** Returns          none
 **
@@ -1366,6 +1366,7 @@ void nfc_hal_nci_handle_ramdump_ntf()
      * 0x00         Unspecified reason
      * 0x01-0x9F    RFU
      * 0xA0         HardFault with RAM Dump available (see NFC Middleware/Post Mortem Debug HLD, Table 5.1)
+     * 0xA1-0xFF    For proprietary use
      *
      * Configuration Status
      * 0x00         NCI RF Configuration has been kept
@@ -1398,7 +1399,7 @@ void nfc_hal_nci_handle_ramdump_ntf()
      * In these cases, the NFCC SHALL inform the DH with the CORE_RESET_NTF.
      *
      * The Reason code SHALL reflect the internal reset reason and the Configuration Status the status of the NCI RF Configuration.
-     * We are interested in code 0xA0 that states internal error.
+     * We are interested in proprietary code 0xA0 that states internal error.
      */
 
     /* Initiate a RAMDUMP if available */
