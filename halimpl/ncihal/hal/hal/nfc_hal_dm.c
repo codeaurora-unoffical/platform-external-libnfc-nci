@@ -20,6 +20,21 @@
  *
  ******************************************************************************/
 
+/*****************************************************************************
+** Debug macro. Uncomment when we get past testing phase.
+*****************************************************************************/
+
+/*
+ * We use NDEBUG to hide some ramdump debug traces and asserts. We use RAMDUMP to output some additional information.
+ * Note: ramdump is not a production level feature.
+ */
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+
+#ifndef RAMDUMP
+#define RAMDUMP
+#endif
 
 /******************************************************************************
  *
@@ -51,7 +66,41 @@
 #define NFC_HAL_I93_ENABLE_SMART_POLL       (1)
 #define PATCH_NOT_UPDATED                    3
 #define PATCH_UPDATED                        4
+static UINT8 nfc_hal_dm_init_ramdump_cmd[NCI_MSG_HDR_SIZE] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    NCI_OID_INIT,
+    0x00 /* Empty payload */
+};
 
+static UINT8 nfc_hal_dm_get_ramdump_cmd[NCI_MSG_HDR_SIZE + NCI_HAL_RAMDATA] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    NCI_OID_GET,
+    NCI_HAL_RAMDATA,        /* Currently 5 bytes in length */
+    0x00, 0x00, 0x00, 0x00, /* Start address to begin next RamDump upload */
+    0x00                    /* Length of this RamDump data */
+};
+
+static UINT8 nfc_hal_dm_end_ramdump_cmd[NCI_MSG_HDR_SIZE] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    NCI_OID_END,
+    0x00 /* Empty payload */
+};
+
+static UINT8 nfc_hal_dm_ramdump_reset_nfcc[NCI_MSG_HDR_SIZE + 0x0D] =
+{
+    NCI_MTS_CMD|NCI_GID_PROP,
+    0x00,
+    0x0D,
+    0x82, 0x78, 0x56, 0x34, 0x12, 0x01, 0x00, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00
+};
+
+#define NFCA_PATCHFILE_V30_LOCATION  "/system/etc/firmware/Signedrompatch_v30.bin"
+#define NFCA_PATCHFILE_V20_LOCATION  "/system/etc/firmware/Signedrompatch_v20.bin"
+#define NFCA_PATCHFILE_V21_LOCATION  "/system/etc/firmware/Signedrompatch_v21.bin"
+#define NFCA_PATCHFILE_V24_LOCATION  "/system/etc/firmware/Signedrompatch_v24.bin"
 static UINT8 nfc_hal_dm_i93_rw_cfg[NFC_HAL_I93_RW_CFG_LEN] =
 {
     NCI_PARAM_ID_I93_DATARATE,
@@ -162,6 +211,7 @@ UINT8 *prepatchdata = NULL;
 UINT8 *pPatch_buff = NULL;
 UINT8 op_code1 = 1;
 UINT8 wait_reset_rsp = FALSE;
+extern UINT8 reset_status;
 #define NCI_PATCH_INFO_OFFSET_NVMTYPE  35  /* NVM Type offset in patch info RSP */
 /*****************************************************************************
 ** Extern function prototypes
@@ -170,6 +220,15 @@ extern UINT8 *p_nfc_hal_dm_lptd_cfg;
 extern UINT8 *p_nfc_hal_dm_start_up_cfg;
 extern UINT8 *p_nfc_hal_dm_start_up_vsc_cfg;
 extern tNFC_HAL_CFG *p_nfc_hal_cfg;
+/*This flag will be set true if ramdump is being started*/
+extern UINT8 reset_status;
+
+/* Ramdump actions */
+#ifndef NDEBUG
+extern void nfc_hal_nci_handle_ramdump_ntf(int mt, int op_code, int pbf, int payload_len, int reason);
+#else
+extern void nfc_hal_nci_handle_ramdump_ntf();
+#endif
 
 /*****************************************************************************
 ** Local function prototypes
@@ -383,6 +442,76 @@ void nfc_hal_dm_send_reset_cmd (void)
 
     nfc_hal_dm_send_nci_cmd (nfc_hal_dm_core_reset_cmd, NCI_MSG_HDR_SIZE + NCI_CORE_PARAM_SIZE_RESET, NULL);
 }
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_init_ramdump_cmd
+**
+** Description      Send NCI Initiate RAMDUMP command
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_init_ramdump_cmd (void)
+{
+    HAL_TRACE_DEBUG0("nfc_hal_dm_send_prop_init_ramdump_cmd: RAMDUMP: Sending NFCC Init CMD");
+    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_init_ramdump_cmd, NCI_MSG_HDR_SIZE, NULL);
+}
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_get_ramdump_cmd
+**
+** Description      Send NCI Get RAMDUMP command
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_get_ramdump_cmd (int ramdump_start_addr, int ramdump_length)
+{
+    HAL_TRACE_DEBUG0("nfc_hal_dm_send_prop_get_ramdump_cmd: RAMDUMP: Sending NFCC Get CMD");
+
+    /* We are not interpreting the addr, this is why we havn't used unsigned int */
+    nfc_hal_dm_get_ramdump_cmd[3] = (ramdump_start_addr >> 24) & 0xFF;
+    nfc_hal_dm_get_ramdump_cmd[4] = (ramdump_start_addr >> 16) & 0xFF;
+    nfc_hal_dm_get_ramdump_cmd[5] = (ramdump_start_addr >> 8) & 0xFF;
+    nfc_hal_dm_get_ramdump_cmd[6] = ramdump_start_addr & 0xFF;
+
+    nfc_hal_dm_get_ramdump_cmd[7] = ramdump_length & 0xFF;
+    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_get_ramdump_cmd, NCI_MSG_HDR_SIZE + NCI_HAL_RAMDATA, NULL);
+}
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_end_ramdump_cmd
+**
+** Description      Send NCI End RAMDUMP command
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_end_ramdump_cmd (void)
+{
+    HAL_TRACE_DEBUG0("nfc_hal_dm_send_prop_end_ramdump_cmd: RAMDUMP: Sending NFCC End CMD");
+    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_end_ramdump_cmd, NCI_MSG_HDR_SIZE, NULL);
+}
+
+
+/*******************************************************************************
+**
+** Function         nfc_hal_dm_send_prop_reset_nfcc_ramdump_poke
+**
+** Description      Sends the NFCC a poke msg with a misalligned address
+**
+** Returns          void
+**
+*******************************************************************************/
+void nfc_hal_dm_send_prop_reset_nfcc_ramdump_poke (void)
+{
+    HAL_TRACE_DEBUG0("nfc_hal_dm_send_prop_reset_nfcc_ramdump_poke: RAMDUMP: Sending NFCC poke to cause reset");
+    nfc_hal_dm_send_nci_cmd (nfc_hal_dm_ramdump_reset_nfcc, NCI_MSG_HDR_SIZE + 0x0D, NULL);
+}
+
 
 /*******************************************************************************
 **
@@ -1146,20 +1275,56 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
     UINT8 *nvmcmd = NULL;
     UINT32 patch_update_flag = 0, nvm_update_flag = 0;
     UINT32 patch_version = 0,fused_nvm_flag=0;
-    char patchfilepath[100] = {0}, prepatchfilepath[100] = {0};
+    char patchfilepath[50] = {0}, prepatchfilepath[50] = {0};
+    size_t str_len = 0;
 
     HAL_TRACE_DEBUG1 ("nfc_hal_dm_proc_msg_during_init(): init state:%d", nfc_hal_cb.dev_cb.initializing_state);
     GetNumValue("PATCH_UPDATE_ENABLE_FLAG", &patch_update_flag, sizeof(patch_update_flag));
     GetNumValue("NVM_UPDATE_ENABLE_FLAG", &nvm_update_flag, sizeof(nvm_update_flag));
     GetNumValue("FUSED_NVM_UPDATE_ENABLE_FLAG", &fused_nvm_flag, sizeof(fused_nvm_flag));
-    if(GetStrValue("FW_PATCH", &patchfilepath[0], sizeof(patchfilepath)))
+    if(nfc_hal_cb.dev_cb.store_path == FALSE)
     {
-        HAL_TRACE_DEBUG1("FW_PATCH found: %s",patchfilepath);
+        /*Select patch file based on chip revision*/
+        if((nfc_hal_cb.dev_cb.nfcc_chip_version == 3) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+        {
+            /*NFCC 3.0*/
+            HAL_TRACE_DEBUG0("NFCC 3.0");
+            if(GetStrValue("FW_PATCH_30", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_30 found: %s",patchfilepath);
+            }
+        }
+        else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+        {
+            /*NFCC 2.0*/
+            HAL_TRACE_DEBUG0("NFCC 2.0");
+            if(GetStrValue("FW_PATCH_20", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_20 found: %s",patchfilepath);
+            }
+        }
+        else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 1))
+        {
+            /*NFCC 2.1*/
+            HAL_TRACE_DEBUG0("NFCC 2.1");
+            if(GetStrValue("FW_PATCH_21", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_21 found: %s",patchfilepath);
+            }
+        }
+        else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 4))
+        {
+            /*NFCC 2.4*/
+            HAL_TRACE_DEBUG0("NFCC 2.4");
+            if(GetStrValue("FW_PATCH_24", &patchfilepath[0], sizeof(patchfilepath)))
+            {
+                HAL_TRACE_DEBUG1("FW_PATCH_24 found: %s",patchfilepath);
+            }
+        }
+        /* Make this flag true so that if file is available or not , next time the patch will not be read*/
+        nfc_hal_cb.dev_cb.store_path = TRUE;
     }
-    else
-    {
-        HAL_TRACE_DEBUG0("FW_PATCH not found");
-    }
+
     if(GetStrValue("FW_PRE_PATCH", &prepatchfilepath[0], sizeof(prepatchfilepath)))
     {
         HAL_TRACE_DEBUG1("FW_PRE_PATCH found: %s",prepatchfilepath);
@@ -1227,15 +1392,53 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             {
                                 HAL_TRACE_DEBUG0("PATCH Update: Pre patch file is not available");
                             }
-
+                            HAL_TRACE_DEBUG1("patchfilepath: %s",patchfilepath);
                             nfc_hal_cb.dev_cb.patch_file_available = nfc_hal_patch_read(patchfilepath,&patchdata,&patchdatalen);
                             if(nfc_hal_cb.dev_cb.patch_file_available)
                             {
-                                HAL_TRACE_DEBUG1 ("PATCH Update: Patch file length is ==%d \n\n",patchdatalen);
+                                HAL_TRACE_DEBUG1 ("PATCH Update: Found file based on chip version . Patch file length is ==%d \n\n",patchdatalen);
                             }
                             else
                             {
-                                HAL_TRACE_DEBUG0("PATCH Update: Patch file is not available");
+                                /* case : if FW patch is not available at the path provided in the conf file.Then look for patch
+                                          at default location*/
+                                HAL_TRACE_DEBUG0("FW_PATCH path not found in config file .Reading default one");
+                                /*Select patch file based on chip revision*/
+                                if((nfc_hal_cb.dev_cb.nfcc_chip_version == 3) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+                                {
+                                    /*NFCC 3.0*/
+                                    str_len = strlen(NFCA_PATCHFILE_V30_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V30_LOCATION,str_len);
+                                }
+                                else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 0))
+                                {
+                                    /*NFCC 2.0*/
+                                    str_len = strlen(NFCA_PATCHFILE_V20_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V20_LOCATION,str_len);
+                                }
+                                else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 1))
+                                {
+                                    /*NFCC 2.1*/
+                                    str_len = strlen(NFCA_PATCHFILE_V21_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V21_LOCATION,str_len);
+                                }
+                                else if((nfc_hal_cb.dev_cb.nfcc_chip_version == 2) && (nfc_hal_cb.dev_cb.nfcc_chip_metal_version == 4))
+                                {
+                                    /*NFCC 2.4*/
+                                    str_len = strlen(NFCA_PATCHFILE_V24_LOCATION);
+                                    memcpy(patchfilepath,NFCA_PATCHFILE_V24_LOCATION,str_len);
+                                }
+
+                                nfc_hal_cb.dev_cb.patch_file_available = nfc_hal_patch_read(patchfilepath,&patchdata,&patchdatalen);
+
+                                if(nfc_hal_cb.dev_cb.patch_file_available)
+                                {
+                                    HAL_TRACE_DEBUG1 ("PATCH Update: Patch file length is ==%d \n\n",patchdatalen);
+                                }
+                                else
+                                {
+                                    HAL_TRACE_DEBUG0("PATCH Update: Patch file is not available");
+                                }
                             }
 
                             /*Check if Prepatch file is relevent for patch file if prepatch exist */
@@ -1249,7 +1452,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             {
                                 patch_update = TRUE;
                             }
-                            if(patch_update)
+                            if((patch_update == TRUE) && (nfc_hal_cb.dev_cb.patch_file_available == TRUE))
                             {
                                 /* Files validated ,start patch update process*/
                                 nfc_hal_cb.dev_cb.patch_applied = FALSE;
@@ -1261,6 +1464,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             else
                             {
                                 HAL_TRACE_DEBUG0("PATCH Update : Validation Failed, Patch Update Cancled..Doing normal Initialization");
+                                patch_update = FALSE;
                                 NFC_HAL_SET_INIT_STATE (NFC_HAL_INIT_STATE_W4_APP_COMPLETE);
                                 HAL_NfcPreInitDone (HAL_NFC_STATUS_OK);
                             }
@@ -1277,7 +1481,7 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
             else
             {
                 /* Call reset notification callback */
-                p++;                                /* Skip over param len */
+                UINT8 payload_len = *p++;
                 STREAM_TO_UINT8 (reset_reason, p);
                 STREAM_TO_UINT8 (reset_type, p);
                 HAL_TRACE_DEBUG2("RESET NTF Recieved before Pre Init: reset_reason = %d  reset_type = %d",reset_reason,reset_type);
@@ -1288,6 +1492,25 @@ void nfc_hal_dm_proc_msg_during_init (NFC_HDR *p_msg)
                             CORE_INIT again.
                */
                HAL_TRACE_DEBUG1(" nfc_hal_cb.dev_cb.initializing_state : %d",nfc_hal_cb.dev_cb.initializing_state);
+
+               if (NCI_HAL_RAMDUMP_REASON == reset_reason)
+               {
+                   HAL_TRACE_DEBUG0 ("nfc_hal_dm_proc_msg_during_init: RAMDUMP: A ramdump is available");
+                   reset_status = TRUE;
+
+#ifndef NDEBUG
+                   nfc_hal_nci_handle_ramdump_ntf(mt, op_code, pbf, payload_len, reset_reason);
+#else
+                   nfc_hal_nci_handle_ramdump_ntf();
+#endif
+               }
+#ifdef RAMDUMP
+               else
+               {
+                   /* Nothing to be sent back to NFCC */
+                   HAL_TRACE_DEBUG1 ("nfc_hal_dm_proc_msg_during_init: RAMDUMP: NFCC initialisation NTF received. No ramdump available as expected. Reason code 0x%x", reset_reason);
+               }
+#endif
 
                if((nfc_hal_cb.dev_cb.initializing_state == NFC_HAL_INIT_STATE_W4_PATCH_INFO))
                {
@@ -1982,63 +2205,16 @@ static void nci_nfc_lp_timeout_cback (void *p_tle)
 
     nfc_hal_dm_power_mode_execute (NFC_HAL_LP_TIMEOUT_EVT);
 }
-
-/****************************************************************************************
-**
-** Function         nfc_hal_read_battery_capacity
-**
-** Description      This function will read the battery capacity and will keep track
-**                  on battery power to put NFCC in region 2.
-**
-** Returns          void
-**
-******************************************************************************************/
-UINT8 nfc_hal_check_system_battery(UINT8 check)
-{
-    const UINT16 SIZE = 128;
-    UINT8 buf[SIZE+1];
-    int fd = 0;
-    switch(check)
-    {
-        case CHECK_BATTERY_PRESENCE:
-            fd = open(POWER_SUPPLY_PATH_BATTERY_PRESENT, O_RDONLY, 0);
-            break;
-        case CHECK_BATTERY_CAPACITY:
-            fd = open(POWER_SUPPLY_PATH_BATTERY_CAPACITY, O_RDONLY, 0);
-            break;
-        default:
-            break;
-    }
-
-    if (fd == -1)
-    {
-        HAL_TRACE_DEBUG1("Could not open '%s'",POWER_SUPPLY_PATH_BATTERY_CAPACITY);
-        return -1;
-    }
-
-    ssize_t count = read(fd, buf, SIZE);
-    if (count <= 0) {
-	buf[0] = '\0';
-    } else {
-        buf[count]='\0';
-    }
-
-    close(fd);
-
-    HAL_TRACE_DEBUG1("Battery Capacity = %d ",atoi(buf));
-    return (atoi(buf));
-}
-
-/*******************************************************************************
+/*********************************************************************************************
 **
 ** Function         nfc_hal_dm_send_prop_nci_region2_control_enable_cmd
 **
-** Description      Sends proprietary command to NFCC to put it in Region 2
-**                  operating mode.
+** Description      Sends NCI command to NFCC to inform that region2 enable/disable
+**                  will be controlled by DH.
 **
 ** Returns          void
 **
-*******************************************************************************/
+*********************************************************************************************/
 void nfc_hal_dm_send_prop_nci_region2_control_enable_cmd(UINT8 debaug_status)
 {
     switch(debaug_status)
@@ -2056,7 +2232,7 @@ void nfc_hal_dm_send_prop_nci_region2_control_enable_cmd(UINT8 debaug_status)
 **
 ** Function         nfc_hal_dm_send_prop_nci_region2_enable_cmd
 **
-** Description      Sends proprietary command to NFCC to put it in Region 2
+** Description      Sends NCI command to NFCC to put it in Region 2
 **                  operating mode.
 **
 ** Returns          void
@@ -2079,7 +2255,7 @@ void nfc_hal_dm_send_prop_nci_region2_enable_cmd(UINT8 debaug_status)
 
 /****************************************************************************************************
 **
-** Function         nfc_hal_store_region2_info
+** Function         nfc_hal_store_info
 **
 ** Description      This will store region 2 enable information in a binary  file /data/nfc/ dir
 **                  in android file system.
@@ -2087,47 +2263,59 @@ void nfc_hal_dm_send_prop_nci_region2_enable_cmd(UINT8 debaug_status)
 ** Returns          void
 **
 ******************************************************************************************************/
-void nfc_hal_store_region2_info(UINT8 operation)
+void nfc_hal_store_info(UINT8 operation)
 {
     FILE * pFile;
     char buffer[1];
     switch(operation)
     {
-        case STORE_INFO:
+        case STORE_INFO_DEBUG_ENABLE:
             buffer[0] = '1';
             HAL_TRACE_DEBUG0 ("Setting Region2 enable info");
             break;
-        case REMOVE_INFO:
+        case DEVICE_POWER_CYCLED:
             HAL_TRACE_DEBUG0 ("Setting Region2 disable info");
             buffer[0] = '0';
+            break;
+        case STROE_INFO_NFC_DISABLED:
+            HAL_TRACE_DEBUG0 ("Setting nfc disabled by User info");
+            buffer[0] = '2';
+            break;
+        case NFCSERVICE_WATCHDOG_TIMER_EXPIRED:
+            HAL_TRACE_DEBUG0 ("TEST111");
+            buffer[0] = '4';
             break;
         default:
             break;
     }
     pFile = fopen ("/data/nfc/nvstorage.bin", "wb");
-    if(pFile)
+    if(pFile != NULL)
     {
         fwrite (buffer , sizeof(char), sizeof(buffer), pFile);
         fclose (pFile);
+    }
+    else
+    {
+        HAL_TRACE_DEBUG0 ("/data/nfc/nvstorage.bin open failed");
     }
 }
 
 /***********************************************************************************************************
 **
-** Function         nfc_hal_retrieve_region2_info
+** Function         nfc_hal_retrieve_info
 **
-** Description      This will retrieve region 2 enable/disable information in a binary  file /data/nfc/ dir
+** Description      This will retrieve region 2 enable/disable and shutdown reason information in a binary  file /data/nfc/ dir
 **                  in android file system.
 **
-** Returns          void
+** Returns          stored value
 **
 ***********************************************************************************************************/
-int nfc_hal_retrieve_region2_info(void)
+char nfc_hal_retrieve_info(void)
 {
     FILE * pFile;
     long lSize;
     char * buffer;
-    int region2_info;
+    char ret_val = 0;
     size_t result;
 
     pFile = fopen ("/data/nfc/nvstorage.bin" , "rb");
@@ -2153,11 +2341,13 @@ int nfc_hal_retrieve_region2_info(void)
     {
         HAL_TRACE_DEBUG0 ("Read opration failed");
     }
+    ret_val = buffer[0];
 
-    region2_info = atoi(buffer);
+    HAL_TRACE_DEBUG1 ("%d ",buffer[0]);
+
     fclose (pFile);
     free (buffer);
-    return region2_info;
+    return ret_val;
 }
 
 /*******************************************************************************
@@ -2174,37 +2364,33 @@ int nfc_hal_retrieve_region2_info(void)
 void nfc_hal_dm_pre_init_nfcc (void)
 {
     int sem_status;
-    UINT16  region2_info;
-    UINT32 region2_enable = 0;
+    UINT8  stored_info = 0;
+    UINT32 region2_enable = 0, debug_enable = 0;
     HAL_TRACE_DEBUG0 ("nfc_hal_dm_pre_init_nfcc ()");
-    /* Check if Region2 enable in nfc-nci.conf file*/
-    GetNumValue("REGION2_ENABLE", &region2_enable, sizeof(region2_enable));
-    if(region2_enable)
+
+    stored_info = nfc_hal_retrieve_info();
+    HAL_TRACE_DEBUG1("stored_info=%d ",stored_info);
+    if((reset_status != TRUE) || (stored_info == NFCSERVICE_WATCHDOG_TIMER_EXPIRED))
     {
-        region2_info = nfc_hal_retrieve_region2_info();
-        HAL_TRACE_DEBUG1("region2_info=%d ",region2_info);
-        if(region2_info)
+        if((stored_info == STORE_INFO_DEBUG_ENABLE) ||
+           (stored_info == STROE_INFO_NFC_DISABLED) ||
+           (stored_info == NFCSERVICE_WATCHDOG_TIMER_EXPIRED))
         {
-            /*Write 0 again in nv file to indicate that region2 info
-              has been read which was updated last time*/
-            nfc_hal_store_region2_info(REMOVE_INFO);
-        }
-        else
-        {
-            /*Region2 was not enabled during last NFCC shut down so do nci wake*/
+            if(nfc_hal_cb.dev_cb.nfcc_sleep_mode != 1)
+            {
+                /*Since wake to be done but last time DH has not sent wake up so set nfcc_sleep_mode to
+                  so wake up can be done*/
+                HAL_TRACE_DEBUG0("nfc_hal_cb.dev_cb.nfcc_sleep_mode = 1");
+                nfc_hal_cb.dev_cb.nfcc_sleep_mode = 1;
+            }
             nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
             GKI_delay(10);
+            /*Write 0 again in nv file to indicate that nfc disable info
+              has been read which was updated last time*/
+            nfc_hal_store_info(REMOVE_INFO);
         }
     }
-    else
-    {
-#ifdef REGION2_DEBUG
-        /*Region2 is not enabled in nfc-nci.conf file then do normal wake*/
-        /*TODO : Remove after test*/
-        nfc_hal_dm_set_nfc_wake (NFC_HAL_ASSERT_NFC_WAKE);
-        GKI_delay(10);
-#endif
-    }
+    HAL_TRACE_DEBUG0 ("nfc_hal_dm_pre_init_nfcc () send_reset_cmd ");
     nfc_hal_dm_send_reset_cmd ();
     wait_reset_rsp = TRUE;
     nfc_post_reset_cb.dev_init_config.flags = 1;
@@ -2227,36 +2413,6 @@ void nfc_hal_dm_shutting_down_nfcc (void)
     HAL_TRACE_DEBUG0 ("nfc_hal_dm_shutting_down_nfcc ()");
 
     nfc_hal_cb.dev_cb.initializing_state = NFC_HAL_INIT_STATE_CLOSING;
-
-    /* Check if Region2 enable in nfc-nci.conf file*/
-    GetNumValue("REGION2_ENABLE", &region2_enable, sizeof(region2_enable));
-    if(region2_enable)
-    {
-        GetNumValue("REGION2_DEBUG_ENABLE_FLAG", &debug_enable, sizeof(debug_enable));
-        if(debug_enable)
-            nfc_hal_dm_send_prop_nci_region2_enable_cmd(REGION2_DEBUG_ENABLE);
-        else
-            nfc_hal_dm_send_prop_nci_region2_enable_cmd(REGION2_DEBUG_DISABLE);
-
-        /*TODO : remove after test*/
-        region2_info_test = nfc_hal_retrieve_region2_info();
-        HAL_TRACE_DEBUG1("*****region2_info=%d ",region2_info_test);
-
-        /*Store this information that NFCC has gone in region 2 in /data/nfc/*/
-        nfc_hal_store_region2_info(STORE_INFO);
-        nfc_hal_cb.wait_sleep_rsp = FALSE;
-
-    }
-    else
-    {
-        if (  (nfc_hal_cb.dev_cb.power_mode  == NFC_HAL_POWER_MODE_FULL)
-         &&(nfc_hal_cb.init_sleep_done)  )
-         {
-             /*TODO : Remove after test*/
-             nfc_hal_dm_set_nfc_wake (NFC_HAL_DEASSERT_NFC_WAKE);
-             nfc_hal_cb.propd_sleep = TRUE;
-         }
-    }
 
     nfc_hal_cb.ncit_cb.nci_wait_rsp = NFC_HAL_WAIT_RSP_NONE;
     nfc_hal_cb.hci_cb.hcp_conn_id = 0;

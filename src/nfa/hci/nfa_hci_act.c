@@ -1320,7 +1320,7 @@ void nfa_hci_handle_admin_gate_cmd (UINT8 *p_data)
 *******************************************************************************/
 void nfa_hci_handle_admin_gate_rsp (UINT8 *p_data, UINT8 data_len)
 {
-    UINT8               hosts[2] = {NFA_HCI_HOST_ID_UICC0, (NFA_HCI_HOST_ID_UICC0 + 1)};
+    UINT8               hosts[2] = {NFA_HCI_HOST_ID_UICC0, NFA_HCI_HOST_ID_ESE};
     UINT8               source_host;
     UINT8               source_gate = nfa_hci_cb.local_gate_in_use;
     UINT8               dest_host   = nfa_hci_cb.remote_host_in_use;
