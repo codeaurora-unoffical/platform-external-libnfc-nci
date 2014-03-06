@@ -60,7 +60,7 @@ tGKI_CB   gki_cb;
 
 /* works only for 1ms to 1000ms heart beat ranges */
 #define LINUX_SEC (1000/TICKS_PER_SEC)
-#define GKI_TICK_TIMER_DEBUG
+// #define GKI_TICK_TIMER_DEBUG
 
 #define LOCK(m)  pthread_mutex_lock(&m)
 #define UNLOCK(m) pthread_mutex_unlock(&m)
