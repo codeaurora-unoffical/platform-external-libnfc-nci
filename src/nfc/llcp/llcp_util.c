@@ -585,7 +585,6 @@ tLLCP_STATUS llcp_util_parse_connect (UINT8  *p_bytes, UINT16 length, tLLCP_CONN
 
         default:
             LLCP_TRACE_ERROR1 ("llcp_util_parse_connect (): Unexpected type 0x%x", param_type);
-            BE_STREAM_TO_UINT8 (param_len, p);
             p += param_len;
             break;
         }
